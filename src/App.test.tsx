@@ -2,9 +2,9 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from './App';
 
-test('shows pssst ready to record', () => {
+test('shows Pssst ready to record', () => {
   render(<App />);
-  expect(screen.getByText('pssst')).toBeInTheDocument();
+  expect(screen.getByText('Pssst')).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: /prêt à enregistrer/i })).toBeInTheDocument();
 });
 

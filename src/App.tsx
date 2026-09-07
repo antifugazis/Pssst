@@ -108,7 +108,7 @@ function Header({
     <header className="app-header product-header">
       <button className="brand brand-button" onClick={() => setView("setup")}>
         <Logo />
-        <span>pssst</span>
+        <span>Pssst</span>
       </button>
       {view !== "setup" && (
         <nav>
@@ -175,11 +175,11 @@ function Onboarding({ finish }: { finish: () => void }) {
       <div className="onboarding-top">
         <button className="brand brand-button">
           <Logo />
-          <span>pssst</span>
+          <span>Pssst</span>
         </button>
         <span>{step + 1} / 6</span>
       </div>
-      <div className="onboarding-content">
+      <div key={step} className="onboarding-content onboarding-step">
         {step === 0 && (
           <>
             <p className="eyebrow">BIENVENUE DANS PSSST</p>
@@ -273,13 +273,17 @@ function Onboarding({ finish }: { finish: () => void }) {
             </p>
             <div className="model-install server-connect-card">
               <strong>1. Installer pssst Whisper</strong>
-              <code>curl -fsSL https://raw.githubusercontent.com/pssst/pssst/main/server/install.sh | sudo bash</code>
-              <button
-                className="ghost-button"
-                onClick={() => navigator.clipboard?.writeText("curl -fsSL https://raw.githubusercontent.com/pssst/pssst/main/server/install.sh | sudo bash")}
-              >
-                Copier la commande
-              </button>
+              <div className="command-box">
+                <code>curl -fsSL https://raw.githubusercontent.com/pssst/pssst/main/server/install.sh | sudo bash</code>
+                <button
+                  className="copy-icon"
+                  aria-label="Copier la commande"
+                  title="Copier la commande"
+                  onClick={() => navigator.clipboard?.writeText("curl -fsSL https://raw.githubusercontent.com/pssst/pssst/main/server/install.sh | sudo bash")}
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>
+                </button>
+              </div>
               <label>
                 <strong>2. Connection link</strong>
                 <input

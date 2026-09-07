@@ -797,6 +797,13 @@ h1 em {
   font-size: 16px;
   margin-top: 28px;
 }
+.onboarding-step {
+  animation: onboarding-step-arrive 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@keyframes onboarding-step-arrive {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 .onboarding-actions {
   display: flex;
   justify-content: flex-end;
@@ -916,6 +923,108 @@ h1 em {
   margin-top: 12px;
   width: max-content;
 }
+.server-connect-card {
+  max-width: 640px;
+  gap: 12px;
+  padding: 22px 0;
+}
+.server-connect-card code {
+  display: block;
+  overflow-x: auto;
+  padding: 14px 16px;
+  border: 1px solid #e1ddd5;
+  border-radius: 9px;
+  background: #f0eee8;
+  color: #536251;
+  font: 12px/1.55 "DM Mono", monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.command-box {
+  position: relative;
+}
+.command-box code {
+  padding-right: 54px;
+}
+.copy-icon {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid #d1d9cd;
+  border-radius: 7px;
+  background: #f7fbf5;
+  color: #567652;
+  transform: translateY(-50%);
+  transition: background 0.2s, transform 0.2s;
+}
+.copy-icon:hover {
+  background: #eaf3e7;
+  transform: translateY(-50%) scale(1.04);
+}
+.copy-icon svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+}
+.server-connect-card label {
+  display: grid;
+  gap: 8px;
+  margin-top: 4px;
+}
+.server-connect-card label strong {
+  font-size: 13px;
+}
+.server-connect-card input {
+  width: 100%;
+  min-height: 44px;
+  padding: 11px 13px;
+  border: 1px solid #c9cfc7;
+  border-radius: 9px;
+  background: #fffdfa;
+  color: #1f2521;
+  font-size: 13px;
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+}
+.server-connect-card input::placeholder {
+  color: #a1aaa1;
+}
+.server-connect-card input:focus {
+  border-color: #789a73;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(120, 154, 115, 0.14);
+  outline: none;
+}
+.server-connect-card .record-button {
+  margin-top: 4px;
+  width: max-content;
+}
+.ghost-button {
+  justify-self: end;
+  border: 1px solid #c9d3c5;
+  border-radius: 8px;
+  padding: 9px 12px;
+  background: #f7fbf5;
+  color: #567652;
+  font-size: 11px;
+  transition: transform 0.2s, background 0.2s;
+}
+.ghost-button:hover {
+  transform: translateY(-1px);
+  background: #eaf3e7;
+}
+.server-success,
+.server-error {
+  font-size: 12px;
+  line-height: 1.45;
+}
+.server-success { color: #567652; }
+.server-error { color: #a25542; }
 .permission-list {
   margin-top: 36px;
   display: grid;
@@ -1003,12 +1112,12 @@ h1 em {
 /* Product views retain the setup screen's paper, ink and quiet-status language. */
 .server-setup-note{display:grid;gap:8px;padding:16px;border:1px solid #ddd9d1;border-radius:11px;background:#fffdfa}.server-setup-note strong{font-size:13px}.server-setup-note small{color:#788278;font-size:11px;line-height:1.45}.server-setup-note code{display:block;overflow:auto;padding:10px;background:#f0eee8;border-radius:7px;color:#536251;font:10px 'DM Mono',monospace;white-space:nowrap}.server-setup-note button{justify-self:start;border:0;background:none;color:#567652;font-size:11px;text-decoration:underline;text-underline-offset:3px}
 .view-transition {
-  animation: view-arrive 0.42s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: view-arrive 0.58s cubic-bezier(0.2, 0.8, 0.2, 1) both;
   transform-origin: 50% 8%;
   will-change: opacity, transform;
 }
 .view-transition > * {
-  animation: view-content 0.52s 0.03s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: view-content 0.68s 0.04s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 @keyframes view-arrive {
   from {
