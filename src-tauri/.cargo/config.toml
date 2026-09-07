@@ -1,0 +1,8 @@
+# ScreenCaptureKit links against Swift concurrency on macOS. Keep the system
+# Swift runtime on the executable's search path so `tauri dev` can launch from
+# a clean terminal without a manual install_name_tool step.
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "link-arg=-Wl,-rpath,/usr/lib/swift"]
+
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "link-arg=-Wl,-rpath,/usr/lib/swift"]
