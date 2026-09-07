@@ -1,0 +1,49 @@
+name: Publish pssst installer
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "server/install.sh"
+      - ".github/workflows/publish-installer.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout private repository
+        uses: actions/checkout@v4
+
+      - name: Prepare public installer only
+        run: |
+          test -f server/install.sh
+          mkdir -p _site
+          cp server/install.sh _site/install.sh
+          printf '%s\n' 'pssst installer' > _site/index.txt
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload installer artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy installer
+        id: deployment
+        uses: actions/deploy-pages@v4
