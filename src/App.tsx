@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { Library as LibraryIcon, Plus, Settings as SettingsIcon, Square } from "lucide-react";
 import { CourseInput } from "./components/CourseInput";
 import { MicrophoneToggle } from "./components/MicrophoneToggle";
 import { SourcePicker } from "./components/SourcePicker";
@@ -112,8 +113,12 @@ function Header({
         <span className="sr-only">Pssst</span>
       </button>
       <nav aria-label="Navigation principale">
-        <button onClick={() => setView("library")}>Cours</button>
-        <button onClick={() => setView("settings")}>Réglages</button>
+        <button onClick={() => setView("library")}>
+          <LibraryIcon size={15} aria-hidden="true" /> Cours
+        </button>
+        <button onClick={() => setView("settings")}>
+          <SettingsIcon size={15} aria-hidden="true" /> Réglages
+        </button>
       </nav>
       <div className="ready-status">
         <span /> {view === "recording" ? "En cours" : "Prêt"}
@@ -676,7 +681,7 @@ function Recording({
               await stop();
             }}
           >
-            <span />
+            <Square size={12} fill="currentColor" stroke="none" aria-hidden="true" />
             {stopping ? "Finalisation…" : "Terminer le cours"}
           </button>
         </div>
@@ -765,12 +770,10 @@ function Library({
   sessions,
   open,
   setup,
-  continueCourse,
 }: {
   sessions: RecordingSnapshot[];
   open: (snapshot: RecordingSnapshot) => void;
   setup: () => void;
-  continueCourse: (course: string, appId?: string | null, mic?: boolean) => void;
 }) {
   return (
     <main className="library-page">
@@ -784,7 +787,7 @@ function Library({
           </h1>
         </div>
         <button className="new-recording" onClick={setup}>
-          + Enregistrer un cours
+          <Plus size={14} aria-hidden="true" /> Enregistrer un cours
         </button>
       </div>
       <div className="search-line">
@@ -809,20 +812,6 @@ function Library({
                 </small>
               </span>
               <span className="lecture-end-actions">
-                <span
-                  className="continue-chip"
-                  title="Continuer ce cours"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    continueCourse(
-                      snapshot.session.course,
-                      snapshot.session.selected_application.id,
-                      snapshot.session.microphone_included,
-                    );
-                  }}
-                >
-                  Continuer
-                </span>
                 <i className="lecture-status">
                   {snapshot.session.recording_state === "recoverable"
                     ? "À récupérer"
@@ -854,8 +843,9 @@ function Detail({
   const [version, setVersion] = useState("final");
   const [audioUrl, setAudioUrl] = useState("");
   const [audioError, setAudioError] = useState("");
-  const [playing, setPlaying] = useState(false);
   const [session, setSession] = useState(snapshot.session);
+  const [correcting, setCorrecting] = useState(false);
+  const [correctionMessage, setCorrectionMessage] = useState("");
 
   useEffect(() => {
     setSession(snapshot.session);
@@ -922,9 +912,9 @@ function Detail({
         time: segment.start_ms,
         text:
           version === "final"
-            ? (segment.final_text ?? segment.corrected_text ?? segment.raw_text)
+            ? (segment.final_text || segment.corrected_text || segment.raw_text)
             : version === "corrected"
-              ? (segment.corrected_text ?? segment.raw_text)
+              ? (segment.corrected_text || segment.raw_text)
               : segment.raw_text,
       })),
     [session.transcript_segments, version],
@@ -954,24 +944,6 @@ function Detail({
             + Continuer ce cours
           </button>
           <div className="audio-player">
-            <button
-              disabled={!audioUrl}
-              onClick={() => {
-                const audio =
-                  document.querySelector<HTMLAudioElement>("#lecture-audio");
-                if (!audio) return;
-                if (audio.paused) {
-                  audio.play();
-                  setPlaying(true);
-                } else {
-                  audio.pause();
-                  setPlaying(false);
-                }
-              }}
-            >
-              {playing ? "Ⅱ" : "▶"}
-            </button>
-            <span />
             <small>
               {audioUrl ? "Piste locale · prête à écouter" : audioError ? "Piste locale indisponible" : "Préparation de la piste locale…"}
             </small>
@@ -980,7 +952,6 @@ function Detail({
                 id="lecture-audio"
                 src={audioUrl}
                 controls
-                onEnded={() => setPlaying(false)}
                 onError={(event) => {
                   const detail = event.currentTarget.error?.message || "format audio invalide";
                   const message = `Impossible de lire cette piste locale : ${detail}`;
@@ -1009,6 +980,33 @@ function Detail({
         ))}
       </div>
       <div className="detail-transcript">
+        {version === "corrected" && (
+          <div className="correct-bar">
+            <button
+              type="button"
+              className="correct-button"
+              disabled={correcting || !session.transcript_segments.length}
+              onClick={async () => {
+                if (!isTauri()) return;
+                setCorrecting(true);
+                setCorrectionMessage("");
+                try {
+                  await native.correctSession(session.id);
+                  setCorrectionMessage("Correction lancée. Les segments corrigés apparaîtront ici.");
+                } catch (error) {
+                  setCorrectionMessage(String(error));
+                } finally {
+                  setCorrecting(false);
+                }
+              }}
+            >
+              {correcting ? "Correction en cours…" : "Corriger la transcription"}
+            </button>
+            {correctionMessage && (
+              <span className="correct-status">{correctionMessage}</span>
+            )}
+          </div>
+        )}
         {transcript.map((line, index) => (
           <p key={`${line.time}-${index}`}>
             <time>{formatTime(Math.floor(line.time / 1000))}</time>
@@ -1066,12 +1064,19 @@ function Settings() {
       );
     }
   };
-  const save = () => {
+  const save = async () => {
     localStorage.setItem("pssst.openrouter-model", model.trim());
     localStorage.setItem("pssst.openrouter-api-key", apiKey.trim());
     localStorage.setItem("pssst.transcription-mode", mode);
     localStorage.setItem("pssst.account-name", accountName);
     localStorage.setItem("pssst.account-email", accountEmail);
+    if (isTauri()) {
+      try {
+        await native.saveOpenRouterConfig(apiKey.trim(), model.trim());
+      } catch (error) {
+        console.error("Failed to persist OpenRouter config", error);
+      }
+    }
     setAccountSaved(true);
     window.setTimeout(() => setAccountSaved(false), 1800);
   };
@@ -1256,9 +1261,38 @@ export default function App() {
     }
   }, []);
 
-  const continueCourse = (course: string, appId?: string | null, mic?: boolean) => {
-    setPrefill({ course, appId, mic: mic ?? true });
-    setView("setup");
+  const continueCourse = async (
+    course: string,
+    appId?: string | null,
+    mic?: boolean,
+  ) => {
+    const useMic = mic ?? true;
+    preference.set("pssst.last-course", course.trim());
+    if (appId) preference.set("pssst.last-app-id", appId);
+    // Non-Tauri preview: fall back to the setup form.
+    if (!isTauri()) {
+      setPrefill({ course, appId, mic: useMic });
+      setView("setup");
+      return;
+    }
+    try {
+      const applications = await native.applications();
+      const found = applications.find((a) => a.id === appId && a.available);
+      if (!found) {
+        // Application no longer running/available: guide via setup.
+        setPrefill({ course, appId, mic: useMic });
+        setView("setup");
+        return;
+      }
+      const current = await native.start(course, found, useMic);
+      setSnapshot(current);
+      setView("recording");
+      await refreshLibrary();
+    } catch {
+      // Capture failed: let the user adjust in setup instead of a dead end.
+      setPrefill({ course, appId, mic: useMic });
+      setView("setup");
+    }
   };
 
   const start = async (source: UiSource, course: string, mic: boolean) => {
@@ -1350,7 +1384,6 @@ export default function App() {
               });
               setView("setup");
             }}
-            continueCourse={continueCourse}
           />
         )}
         {view === "detail" && snapshot && (

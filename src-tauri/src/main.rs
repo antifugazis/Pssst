@@ -19,7 +19,9 @@ fn main() {
             pssst::commands::stop_recording,
             pssst::commands::get_recording_session,
             pssst::commands::list_recording_sessions,
-            pssst::commands::recording_track_path
+            pssst::commands::recording_track_path,
+            pssst::commands::save_openrouter_config,
+            pssst::commands::correct_session
         ])
         .run(tauri::generate_context!())
         .expect("error while running pssst");

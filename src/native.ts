@@ -21,6 +21,8 @@ export const native = {
   stop: (sessionId: string) => invoke<RecordingSnapshot>('stop_recording', { sessionId }),
   list: () => invoke<RecordingSnapshot[]>('list_recording_sessions'),
   get: (sessionId: string) => invoke<RecordingSnapshot>('get_recording_session', { sessionId }),
+  saveOpenRouterConfig: (apiKey: string, model: string) => invoke<void>('save_openrouter_config', { apiKey, model }),
+  correctSession: (sessionId: string) => invoke<void>('correct_session', { sessionId }),
 };
 
 /**

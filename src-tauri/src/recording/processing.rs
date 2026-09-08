@@ -22,9 +22,24 @@ pub fn resume_pending(store: SessionStore) {
     }
 }
 
+/// Trigger a one-shot correction pass for a session (final=true). Used by the
+/// "Corriger la transcription" button in the Detail view so the user can retry
+/// correction after fixing their OpenRouter settings.
+pub fn spawn_correction(store: &SessionStore, id: Uuid) {
+    let store = store.clone();
+    let _ = thread::Builder::new()
+        .name(format!("pssst-correction-{id}"))
+        .spawn(move || {
+            match process_once(&store, id, true) {
+                Ok(()) => eprintln!("pssst correction: completed for {id}"),
+                Err(error) => eprintln!("pssst correction: {error:#} for {id}"),
+            }
+        });
+}
+
 fn process_once(store: &SessionStore, id: Uuid, finalizing: bool) -> Result<()> { let session = store.load(&id)?; let source = store.track_path(&session, TrackKind::Application)?; let mut queue = refresh_queue(store, id, &source, finalizing)?; let (base, secret) = server_connection(store)?; let client = Client::builder().timeout(Duration::from_secs(120)).default_headers({ let mut h=reqwest::header::HeaderMap::new(); h.insert(reqwest::header::AUTHORIZATION, format!("Bearer {secret}").parse()?); h }).build()?; client.post(format!("{base}/v1/sessions/{id}")).send()?.error_for_status()?;
 for index in 0..queue.items.len() { if queue.items[index].state == "complete" { continue; } queue.items[index].attempts += 1; queue.items[index].state = "uploading".into(); save(store,id,&queue)?; let item = queue.items[index].clone(); match upload(&client,&base,id,&item) { Ok(()) => { queue.items[index].state="complete".into(); queue.items[index].last_error=None; save(store,id,&queue)?; sync(&client,&base,store,id)?; }, Err(error) => { queue.items[index].state="retry".into(); queue.items[index].last_error=Some(error.to_string()); save(store,id,&queue)?; let mut s=store.load(&id)?; s.transcription_state=TrackProcessingState::Failed; s.last_error=queue.items[index].last_error.clone(); store.save(&s)?; return Err(error); } } }
-let mut s=store.load(&id)?; s.transcription_state=TrackProcessingState::Uploaded; store.save(&s)?; if finalizing { let _=client.post(format!("{base}/v1/sessions/{id}/correct?final=true")).send(); let _=sync(&client,&base,store,id); } Ok(()) }
+let mut s=store.load(&id)?; s.transcription_state=TrackProcessingState::Uploaded; store.save(&s)?; if finalizing { let mut req=client.post(format!("{base}/v1/sessions/{id}/correct?final=true")); if let Some((key,model))=openrouter_config(store) { req=req.json(&serde_json::json!({"openrouter_api_key": key, "openrouter_model": model})); } let _=req.send(); let _=sync(&client,&base,store,id); } Ok(()) }
 fn refresh_queue(store:&SessionStore,id:Uuid,source:&PathBuf,finalizing:bool)->Result<Queue>{let path=store.queue_path(&id);let mut queue=if path.exists(){serde_json::from_slice(&fs::read(&path)?)?}else{Queue{items:vec![]}};let data=fs::read(source)?;if data.len()<=WAV_HEADER{return Ok(queue)};let payload=&data[WAV_HEADER..];let bytes=if finalizing{payload.len()}else{payload.len()/ (CHUNK_SECONDS*BYTES_PER_SECOND)*(CHUNK_SECONDS*BYTES_PER_SECOND)};let dir=source.parent().context("track parent")?.join("chunks");fs::create_dir_all(&dir)?;for(sequence,part)in payload[..bytes].chunks(CHUNK_SECONDS*BYTES_PER_SECOND).enumerate(){if queue.items.iter().any(|item|item.sequence==sequence){continue}let target=dir.join(format!("{sequence:06}.wav"));wav(&target,part)?;queue.items.push(QueueItem{sequence,start_ms:(sequence*CHUNK_SECONDS*1000)as i64,end_ms:((sequence*CHUNK_SECONDS*1000)+(part.len()*1000/BYTES_PER_SECOND))as i64,path:target.to_string_lossy().into(),state:"queued".into(),attempts:0,last_error:None});}queue.items.sort_by_key(|item|item.sequence);save(store,id,&queue)?;Ok(queue)}
 fn wav(path:&PathBuf,data:&[u8])->Result<()> {let mut f=fs::File::create(path)?;let ch=2u16;let rate=48_000u32;let bits=16u16;let br=rate*ch as u32*bits as u32/8;let align=ch*bits/8;f.write_all(b"RIFF")?;f.write_all(&(36+data.len()as u32).to_le_bytes())?;f.write_all(b"WAVEfmt ")?;f.write_all(&16u32.to_le_bytes())?;f.write_all(&1u16.to_le_bytes())?;f.write_all(&ch.to_le_bytes())?;f.write_all(&rate.to_le_bytes())?;f.write_all(&br.to_le_bytes())?;f.write_all(&align.to_le_bytes())?;f.write_all(&bits.to_le_bytes())?;f.write_all(b"data")?;f.write_all(&(data.len()as u32).to_le_bytes())?;f.write_all(data)?;f.sync_all()?;Ok(())}
 fn upload(c:&Client,b:&str,id:Uuid,item:&QueueItem)->Result<()>{let f=fs::File::open(&item.path)?;let form=multipart::Form::new().part("audio",multipart::Part::reader(f).file_name(format!("{}.wav",item.sequence)));c.post(format!("{b}/v1/sessions/{id}/chunks/{}",item.sequence)).multipart(form).send()?.error_for_status()?;c.post(format!("{b}/v1/sessions/{id}/chunks/{}/transcribe",item.sequence)).send()?.error_for_status()?;Ok(())}
@@ -37,4 +52,16 @@ fn server_connection(store: &SessionStore) -> Result<(String, String)> {
     let (base, secret) = link.trim().rsplit_once("/connect/").context("Invalid pssst connection link")?;
     if secret.len() < 32 { anyhow::bail!("Invalid pssst connection link") }
     Ok((base.trim_end_matches('/').into(), secret.into()))
+}
+
+#[derive(Deserialize)]
+struct OpenRouterConfig { api_key: Option<String>, model: Option<String> }
+
+fn openrouter_config(store: &SessionStore) -> Option<(String, String)> {
+    let path = store.root().join("openrouter-config.json");
+    let data = fs::read_to_string(&path).ok()?;
+    let config: OpenRouterConfig = serde_json::from_str(&data).ok()?;
+    let key = config.api_key.filter(|k| !k.is_empty())?;
+    let model = config.model.filter(|m| !m.is_empty())?;
+    Some((key, model))
 }

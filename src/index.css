@@ -1179,31 +1179,14 @@ h1 em {
 /* Product views retain the setup screen's paper, ink and quiet-status language. */
 .server-setup-note{display:grid;gap:8px;padding:16px;border:1px solid #ddd9d1;border-radius:11px;background:#fffdfa}.server-setup-note strong{font-size:13px}.server-setup-note small{color:#788278;font-size:11px;line-height:1.45}.server-setup-note code{display:block;overflow:auto;padding:10px;background:#f0eee8;border-radius:7px;color:#536251;font:10px 'DM Mono',monospace;white-space:nowrap}.server-setup-note button{justify-self:start;border:0;background:none;color:#567652;font-size:11px;text-decoration:underline;text-underline-offset:3px}
 .view-transition {
-  animation: view-arrive 0.58s cubic-bezier(0.2, 0.8, 0.2, 1) both;
-  transform-origin: 50% 8%;
-  will-change: opacity, transform;
-}
-.view-transition > * {
-  animation: view-content 0.68s 0.04s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: view-arrive 0.18s ease-out both;
 }
 @keyframes view-arrive {
   from {
     opacity: 0;
-    transform: translateY(8px) scale(0.995);
   }
   to {
     opacity: 1;
-    transform: none;
-  }
-}
-@keyframes view-content {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
   }
 }
 .brand-button,
@@ -1228,8 +1211,11 @@ h1 em {
   margin-right: 34px;
 }
 .product-header nav button {
+  align-items: center;
   color: #7c847c;
+  display: inline-flex;
   font-size: 13px;
+  gap: 6px;
 }
 .product-header nav button:hover {
   color: #253028;
@@ -1481,6 +1467,9 @@ h1 em {
   border-radius: 9px;
   padding: 12px 15px;
   font-size: 12px;
+  align-items: center;
+  display: inline-flex;
+  gap: 7px;
 }
 .search-line {
   border-bottom: 1px solid #d8d5cc;
@@ -1539,21 +1528,6 @@ h1 em {
   display: flex;
   align-items: center;
   gap: 12px;
-}
-.continue-chip {
-  background: #e9f0e6;
-  color: #27342b;
-  border-radius: 6px;
-  font: 500 11px "DM Sans", sans-serif;
-  padding: 4px 9px;
-  border: 1px solid #d2ded0;
-  transition: all 0.15s ease;
-  cursor: pointer;
-}
-.continue-chip:hover {
-  background: #27342b;
-  color: #fff;
-  border-color: #27342b;
 }
 .detail-head-actions {
   display: flex;
@@ -1625,6 +1599,35 @@ h1 em {
 .version-tabs button.selected {
   color: #27342b;
   border-bottom: 2px solid #6e9468;
+}
+.correct-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+.correct-button {
+  background: #27342b;
+  color: #fff;
+  border: 1px solid #27342b;
+  border-radius: 8px;
+  padding: 9px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.correct-button:hover:not(:disabled) {
+  background: #3f5744;
+}
+.correct-button:disabled {
+  background: #c4c7c1;
+  border-color: #c4c7c1;
+  cursor: not-allowed;
+}
+.correct-status {
+  color: #788278;
+  font-size: 11px;
 }
 .detail-transcript {
   max-width: 700px;

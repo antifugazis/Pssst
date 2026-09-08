@@ -1,6 +1,8 @@
 import uuid
 from pathlib import Path
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from .config import settings
@@ -14,6 +16,10 @@ router = APIRouter(prefix="/v1", dependencies=[Depends(authorize)])
 connect_router = APIRouter()
 whisper = FasterWhisperProvider()
 correction = OpenRouterCorrectionProvider()
+
+class CorrectRequest(BaseModel):
+    openrouter_api_key: Optional[str] = None
+    openrouter_model: Optional[str] = None
 
 @connect_router.get("/connect/{secret}")
 async def connect(secret: str):
@@ -61,24 +67,67 @@ async def transcript(session_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     return [{"id": str(row.id), "start_ms": row.start_ms, "end_ms": row.end_ms, "raw_text": row.raw_text, "corrected_text": row.corrected_text, "final_text": row.final_text} for row in rows]
 
 @router.post("/sessions/{session_id}/correct")
-async def correct_transcript(session_id: uuid.UUID, final: bool = False, db: AsyncSession = Depends(get_db)):
-    """Correction is deliberately independent from Whisper: failures leave raw text intact."""
+async def correct_transcript(session_id: uuid.UUID, final: bool = False, body: CorrectRequest | None = None, db: AsyncSession = Depends(get_db)):
+    """Correction is deliberately independent from Whisper: failures leave raw text intact.
+
+    The desktop app may pass OpenRouter credentials in the JSON body so the
+    server can use the user's own API key instead of requiring server-side env
+    vars. Falls back to the server's configured settings when no body is sent.
+
+    Segments are batched into ~60s windows before correction so the model has
+    enough surrounding context. The corrected batch is split back per-segment
+    by line so each row keeps its own corrected/final text.
+    """
     session = await db.get(Session, session_id)
     if not session:
         raise HTTPException(404, "Unknown session")
     rows = (await db.scalars(select(TranscriptSegment).where(TranscriptSegment.session_id == session_id).order_by(TranscriptSegment.start_ms))).all()
     if not rows:
         return {"state": "waiting", "segment_count": 0}
-    batch = CorrectionBatch(session_id=session_id, provider="openrouter", model=settings.openrouter_model or "unconfigured", status="processing", attempt_count=1)
+    provider = OpenRouterCorrectionProvider(
+        api_key=body.openrouter_api_key if body else None,
+        model=body.openrouter_model if body else None,
+    )
+    effective_key = (body.openrouter_api_key if body else None) or settings.openrouter_api_key
+    effective_model = (body.openrouter_model if body else None) or settings.openrouter_model or "unconfigured"
+    batch = CorrectionBatch(session_id=session_id, provider="openrouter", model=effective_model, status="processing", attempt_count=1)
     db.add(batch); await db.commit()
     try:
-        for row in rows:
-            corrected = await (correction.correct_final_transcript(row.raw_text) if final else correction.correct_live_context(row.raw_text))
-            if final: row.final_text = corrected
-            else: row.corrected_text = corrected
+        # Group segments into ~60s windows so the model gets enough context.
+        BATCH_MS = 60_000
+        groups: list[list[int]] = []  # indices into rows
+        for i, row in enumerate(rows):
+            if not groups:
+                groups.append([i])
+                continue
+            current = groups[-1]
+            window_start = rows[current[0]].start_ms
+            if row.start_ms - window_start >= BATCH_MS:
+                groups.append([i])
+            else:
+                current.append(i)
+
+        for group in groups:
+            raw_lines = [rows[idx].raw_text for idx in group]
+            joined = "\n".join(raw_lines)
+            corrected_joined = await (provider.correct_final_transcript(joined) if final else provider.correct_live_context(joined))
+            corrected_lines = corrected_joined.strip().splitlines()
+            # If the model returned fewer/more lines than we sent, fall back to
+            # assigning the whole correction to the first segment so we never
+            # lose text or misalign rows.
+            if len(corrected_lines) == len(group):
+                for j, idx in enumerate(group):
+                    if final: rows[idx].final_text = corrected_lines[j].strip()
+                    else: rows[idx].corrected_text = corrected_lines[j].strip()
+            else:
+                if final: rows[group[0]].final_text = corrected_joined
+                else: rows[group[0]].corrected_text = corrected_joined
+                for idx in group[1:]:
+                    if final: rows[idx].final_text = ""
+                    else: rows[idx].corrected_text = ""
         batch.status = "complete"; await db.commit()
     except Exception as error:
-        batch.status = "blocked" if not settings.openrouter_api_key else "failed"; await db.commit()
+        batch.status = "blocked" if not effective_key else "failed"; await db.commit()
         return {"state": batch.status, "detail": str(error), "segment_count": 0}
     return {"state": "complete", "segment_count": len(rows), "final": final}
 

@@ -114,6 +114,16 @@ pub fn validate_server_link(controller: State<'_, RecordingController>, link: St
 }
 
 #[tauri::command]
+pub fn save_openrouter_config(controller: State<'_, RecordingController>, api_key: String, model: String) -> Result<(), String> {
+    if let Ok(service) = controller.0.lock() {
+        let path = service.store().root().join("openrouter-config.json");
+        let payload = serde_json::json!({ "api_key": api_key.trim(), "model": model.trim() });
+        std::fs::write(path, payload.to_string()).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
 pub fn start_recording(controller: State<'_, RecordingController>, request: StartRecordingRequest) -> Result<RecordingSnapshot, String> {
     controller.0.lock().map_err(|_| "The recording service is unavailable".to_string())?.start(request).map_err(|error| error.to_string())
 }
@@ -139,4 +149,17 @@ pub fn list_recording_sessions(controller: State<'_, RecordingController>) -> Re
 pub fn recording_track_path(controller: State<'_, RecordingController>, session_id: String, track: crate::capture::TrackKind) -> Result<String, String> {
     let id = Uuid::parse_str(&session_id).map_err(|_| "Invalid recording session id".to_string())?;
     controller.0.lock().map_err(|_| "The recording service is unavailable".to_string())?.track_path(id, track).map(|path| path.to_string_lossy().into_owned()).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn correct_session(controller: State<'_, RecordingController>, session_id: String) -> Result<(), String> {
+    let id = Uuid::parse_str(&session_id).map_err(|_| "Invalid recording session id".to_string())?;
+    let store = {
+        let service = controller.0.lock().map_err(|_| "The recording service is unavailable".to_string())?;
+        service.store().clone()
+    };
+    // Reuse the processing worker so the existing connection + OpenRouter
+    // config plumbing handles the request. Spawn detached so the UI stays responsive.
+    crate::recording::spawn_correction(&store, id);
+    Ok(())
 }

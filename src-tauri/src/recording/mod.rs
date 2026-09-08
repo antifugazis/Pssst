@@ -3,7 +3,7 @@ mod processing;
 mod service;
 mod storage;
 pub use manifest::{LocalSession, LocalTranscriptSegment, RecordingState, SessionTrack, TrackProcessingState};
-pub use processing::spawn_processing;
+pub use processing::{spawn_processing, spawn_correction};
 pub use storage::{recover_sessions, SessionStore};
 pub use service::{RecordingService, RecordingSnapshot};
 
