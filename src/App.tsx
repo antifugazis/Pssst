@@ -813,16 +813,45 @@ function Detail({ snapshot }: { snapshot: RecordingSnapshot }) {
   const session = snapshot.session;
   useEffect(() => {
     if (!isTauri()) return;
+    let objectUrlToRevoke: string | null = null;
+    let isCancelled = false;
     invokeTrack(session.id)
-      .then((path) => {
+      .then(async (path) => {
+        if (isCancelled) return;
         setAudioError("");
-        setAudioUrl(convertFileSrc(path));
+        const assetUrl = convertFileSrc(path);
+        try {
+          const res = await fetch(assetUrl);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const blob = await res.blob();
+          if (isCancelled) return;
+          if (blob.size <= 44) {
+            setAudioUrl("");
+            setAudioError("Cette session ne contient aucun signal audio enregistré.");
+            return;
+          }
+          const blobUrl = URL.createObjectURL(blob);
+          objectUrlToRevoke = blobUrl;
+          setAudioUrl(blobUrl);
+        } catch {
+          if (!isCancelled) {
+            setAudioUrl(assetUrl);
+          }
+        }
       })
       .catch((error) => {
-        setAudioUrl("");
-        setAudioError(String(error));
-        console.error("Pssst audio track error", error);
+        if (!isCancelled) {
+          setAudioUrl("");
+          setAudioError(String(error));
+          console.error("Pssst audio track error", error);
+        }
       });
+    return () => {
+      isCancelled = true;
+      if (objectUrlToRevoke) {
+        URL.revokeObjectURL(objectUrlToRevoke);
+      }
+    };
   }, [session.id]);
   const transcript = useMemo(
     () =>
