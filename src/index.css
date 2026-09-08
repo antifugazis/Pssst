@@ -1630,14 +1630,16 @@ h1 em {
   font-size: 11px;
 }
 .corrected-block {
+  display: block;
   line-height: 1.8;
   font-size: 15px;
   color: #2c2c2c;
+  max-width: 700px;
 }
 .detail-transcript {
   max-width: 700px;
 }
-.detail-transcript p {
+.detail-transcript p:not(.corrected-block) {
   display: grid;
   grid-template-columns: 68px 1fr;
   gap: 16px;

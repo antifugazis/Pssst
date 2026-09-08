@@ -1009,9 +1009,9 @@ function Detail({
         )}
         {version === "corrected" ? (
           transcript.length ? (
-            <p className="corrected-block">
+            <div className="corrected-block">
               {transcript.map((line) => line.text).join(" ").replace(/\s+/g, " ")}
-            </p>
+            </div>
           ) : (
             <p className="pending-copy">
               La file locale prépare la transcription de cette session.
