@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { CourseInput } from "./components/CourseInput";
 import { MicrophoneToggle } from "./components/MicrophoneToggle";
@@ -423,6 +423,7 @@ function Setup({
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState("");
   const [permissionRequired, setPermissionRequired] = useState(false);
+  const requestedIcons = useRef(new Set<string>());
   const loadApplications = async () => {
     if (!isTauri()) return;
     try {
@@ -431,13 +432,15 @@ function Setup({
       setPermissionRequired(needsPermission);
       if (needsPermission) return;
       const applications = await native.applications();
-      setSources(
+      setSources((current) =>
         applications.map((application) => ({
           id: application.id,
           name: application.name,
           detail: "Application ouverte",
           available: application.available,
-          iconData: application.icon_data,
+          iconData:
+            current.find((item) => item.id === application.id)?.iconData ??
+            application.icon_data,
           native: application,
         })),
       );
@@ -445,6 +448,8 @@ function Setup({
       // icons afterwards so an indexing delay can never hide the sources.
       void (async () => {
         for (const application of applications) {
+          if (requestedIcons.current.has(application.id)) continue;
+          requestedIcons.current.add(application.id);
           try {
             const iconData = await native.applicationIcon(application.icon_hint);
             if (!iconData) continue;
@@ -467,10 +472,8 @@ function Setup({
     if (!isTauri()) return;
     void loadApplications();
     window.addEventListener("focus", loadApplications);
-    const retry = window.setInterval(() => void loadApplications(), 2500);
     return () => {
       window.removeEventListener("focus", loadApplications);
-      window.clearInterval(retry);
     };
   }, []);
   const ready = canStartRecording({ source, course });
