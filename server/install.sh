@@ -6,7 +6,7 @@ set -euo pipefail
 INSTALL_DIR="${PSSST_INSTALL_DIR:-/opt/pssst-whisper}"
 DATA_DIR="${PSSST_DATA_DIR:-/var/lib/pssst-whisper}"
 LOG_FILE="${PSSST_INSTALL_LOG:-/tmp/pssst-install.log}"
-PORT="${PSSST_PORT:-8000}"
+PORT="${PSSST_PORT:-}"
 
 if [[ ( -t 1 || -t /dev/tty ) && -z "${NO_COLOR:-}" ]]; then
   BOLD=$'\033[1m'; DIM=$'\033[2m'; CYAN=$'\033[36m'; GREEN=$'\033[32m'; YELLOW=$'\033[33m'; RESET=$'\033[0m'
@@ -19,6 +19,22 @@ info() { printf '  %s•%s %s%s%s\n' "$CYAN" "$RESET" "$DIM" "$1" "$RESET"; }
 success() { printf '  %s✓%s %s\n' "$GREEN" "$RESET" "$1"; }
 warn() { printf '  %s! %s%s\n' "$YELLOW" "$1" "$RESET" >&2; }
 pretty() { printf '%s' "$1" | awk '{print toupper(substr($0,1,1)) substr($0,2)}'; }
+port_available() {
+  if command -v ss >/dev/null 2>&1; then
+    ! ss -ltnH 2>/dev/null | awk '{print $4}' | grep -Eq "(:|\\])$1$"
+  else
+    python3 - "$1" 2>/dev/null <<'PY'
+import socket, sys
+s = socket.socket()
+try:
+    s.bind(("0.0.0.0", int(sys.argv[1])))
+except OSError:
+    raise SystemExit(1)
+finally:
+    s.close()
+PY
+  fi
+}
 fail() {
   printf '\n%sInstallation failed.%s\n' "$YELLOW" "$RESET" >&2
   printf '  Full log: %s\n' "$LOG_FILE" >&2
@@ -94,6 +110,17 @@ fi
 if [[ "${PSSST_TEST_ONLY:-0}" == "1" ]]; then
   printf 'Test selections: model=%s quality=%s language=%s\n' "${model:-$recommended_model}" "${quality:-balanced}" "$language"
   exit 0
+fi
+
+if [[ -z "$PORT" ]]; then
+  PORT=8000
+  while ! port_available "$PORT"; do
+    PORT=$((PORT + 1))
+  done
+fi
+if ! [[ "$PORT" =~ ^[0-9]+$ ]] || (( PORT < 1 || PORT > 65535 )); then
+  echo "Invalid PSSST_PORT: $PORT" >&2
+  exit 1
 fi
 
 section "Installing pssst"
