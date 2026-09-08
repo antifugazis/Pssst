@@ -61,19 +61,15 @@ impl MacCaptureBackend { pub fn new() -> Self { Self { next_handle: 1, active: H
 impl CaptureBackend for MacCaptureBackend {
     fn list_applications(&self) -> Result<Vec<CaptureApplication>, CaptureError> {
         let content = SCShareableContent::get().map_err(|error| CaptureError::Backend(format!("ScreenCaptureKit could not read running applications: {error}")))?;
-        let snapshot = content.snapshot().ok_or_else(|| CaptureError::Backend("ScreenCaptureKit returned no application snapshot".into()))?;
         // Keep this response deliberately light. Icon extraction can involve
         // Spotlight and image conversion, so the UI requests it lazily after
         // the application list is already visible.
-        Ok(snapshot.applications.iter().filter(|application| application.process_id > 0).map(|application| CaptureApplication { id: format!("sc-{}", application.process_id), name: application.application_name.clone(), icon_hint: application.bundle_identifier.clone(), icon_data: None, available: true }).collect())
+        Ok(content.applications().into_iter().filter(|application| application.process_id() > 0).map(|application| CaptureApplication { id: format!("sc-{}", application.process_id()), name: application.application_name(), icon_hint: application.bundle_identifier(), icon_data: None, available: true }).collect())
     }
     fn permission_status(&self) -> Result<CapturePermission, CaptureError> {
         let content = SCShareableContent::get()
             .map_err(|error| CaptureError::Backend(format!("ScreenCaptureKit permission probe failed: {error}")))?;
-        let snapshot = content
-            .snapshot()
-            .ok_or_else(|| CaptureError::Backend("ScreenCaptureKit returned no shareable content".into()))?;
-        if snapshot.applications.is_empty() {
+        if content.applications().is_empty() {
             return Err(CaptureError::Backend("ScreenCaptureKit returned no shareable applications; enable Pssst in Screen & System Audio Recording".into()));
         }
         Ok(CapturePermission::Granted)
