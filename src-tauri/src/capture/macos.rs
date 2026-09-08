@@ -33,6 +33,8 @@ impl WavWriter {
 
 struct AudioHandler { writer: Arc<Mutex<WavWriter>> }
 impl SCStreamOutputTrait for AudioHandler { fn did_output_sample_buffer(&self, sample: CMSampleBuffer, _: SCStreamOutputType) { if let Ok(mut writer) = self.writer.lock() { let _ = writer.append_audio(sample); } } }
+struct DiscardVideoHandler;
+impl SCStreamOutputTrait for DiscardVideoHandler { fn did_output_sample_buffer(&self, _sample: CMSampleBuffer, _: SCStreamOutputType) {} }
 struct ActiveCapture { stream: SCStream, writer: Arc<Mutex<WavWriter>> }
 
 pub struct MacCaptureBackend { next_handle: u64, active: HashMap<u64, ActiveCapture> }
@@ -89,6 +91,10 @@ impl CaptureBackend for MacCaptureBackend {
         let writer = Arc::new(Mutex::new(WavWriter::create(output_path)?)); let mut stream = SCStream::new(&filter, &config);
         let output = match request.track { TrackKind::Application => SCStreamOutputType::Audio, TrackKind::Microphone => SCStreamOutputType::Microphone };
         stream.add_output_handler(AudioHandler { writer: writer.clone() }, output).ok_or_else(|| CaptureError::Backend("Could not attach the audio output handler".into()))?;
+        // A window-scoped SCStream still produces video frames internally.
+        // Consume and discard them so ScreenCaptureKit does not report a
+        // missing output or retain frames; only the audio handler writes data.
+        stream.add_output_handler(DiscardVideoHandler, SCStreamOutputType::Screen).ok_or_else(|| CaptureError::Backend("Could not attach the discard video handler".into()))?;
         stream.start_capture().map_err(|error| CaptureError::Backend(error.to_string()))?;
         let handle = self.next_handle; self.next_handle += 1; self.active.insert(handle, ActiveCapture { stream, writer }); Ok(CaptureHandle(handle))
     }

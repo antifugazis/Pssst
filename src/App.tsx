@@ -119,6 +119,7 @@ function Header({
       )}
       <div className="ready-status">
         <span /> {view === "recording" ? "En cours" : "Prêt"}
+        <small>v0.12.23</small>
       </div>
     </header>
   );
