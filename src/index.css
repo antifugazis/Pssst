@@ -1633,7 +1633,6 @@ h1 em {
   line-height: 1.8;
   font-size: 15px;
   color: #2c2c2c;
-  white-space: pre-wrap;
 }
 .detail-transcript {
   max-width: 700px;

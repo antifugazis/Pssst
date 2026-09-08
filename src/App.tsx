@@ -1010,7 +1010,7 @@ function Detail({
         {version === "corrected" ? (
           transcript.length ? (
             <p className="corrected-block">
-              {transcript.map((line) => line.text).join(" ")}
+              {transcript.map((line) => line.text).join(" ").replace(/\s+/g, " ")}
             </p>
           ) : (
             <p className="pending-copy">
