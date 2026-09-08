@@ -6,6 +6,7 @@ set -euo pipefail
 INSTALL_DIR="${PSSST_INSTALL_DIR:-/opt/pssst-whisper}"
 DATA_DIR="${PSSST_DATA_DIR:-/var/lib/pssst-whisper}"
 LOG_FILE="${PSSST_INSTALL_LOG:-/tmp/pssst-install.log}"
+PORT="${PSSST_PORT:-8000}"
 
 if [[ ( -t 1 || -t /dev/tty ) && -z "${NO_COLOR:-}" ]]; then
   BOLD=$'\033[1m'; DIM=$'\033[2m'; CYAN=$'\033[36m'; GREEN=$'\033[32m'; YELLOW=$'\033[33m'; RESET=$'\033[0m'
@@ -180,7 +181,7 @@ Environment=PSSST_QUALITY=$quality
 Environment=PSSST_LANGUAGE=$language
 Environment=PSSST_DEVICE=$device
 Environment=PSSST_COMPUTE_TYPE=$compute
-ExecStart=$INSTALL_DIR/.venv/bin/uvicorn worker:app --host 0.0.0.0 --port 8000
+ExecStart=$INSTALL_DIR/.venv/bin/uvicorn worker:app --host 0.0.0.0 --port $PORT
 Restart=always
 RestartSec=5
 NoNewPrivileges=true
@@ -189,19 +190,27 @@ ReadWritePaths=$DATA_DIR
 [Install]
 WantedBy=multi-user.target
 EOF
-run_step "Starting pssst service" systemctl daemon-reload
+run_step "Reloading service manager" systemctl daemon-reload
 run_step "Starting pssst service" systemctl enable --now pssst-whisper
-sleep 2
-if ! curl -fsS http://127.0.0.1:8000/healthz >>"$LOG_FILE" 2>&1; then
-  warn "The worker did not become healthy. Check: sudo systemctl status pssst-whisper"
+info "Waiting for Whisper to become ready…"
+healthy=0
+for _ in $(seq 1 60); do
+  if curl -fsS "http://127.0.0.1:$PORT/healthz" >>"$LOG_FILE" 2>&1; then healthy=1; break; fi
+  sleep 1
+done
+if (( healthy == 0 )); then
+  warn "The worker did not become healthy on port $PORT."
+  printf '  Recent service output:\n' >&2
+  journalctl -u pssst-whisper -n 16 --no-pager >&2 || true
   fail
 fi
+success "Whisper service ready on port $PORT"
 
 host="$(hostname -I | awk '{print $1}')"
 secret="$(cat "$DATA_DIR/connection-secret")"
 pretty_model="$(pretty "$model")"
 section "pssst is ready"
 printf 'Model: %s\nQuality: %s\nLanguage: French\n\n' "$pretty_model" "$(pretty "$quality")"
-printf '%sConnection link%s\n  http://%s:8000/connect/%s\n\n' "$BOLD" "$RESET" "$host" "$secret"
+printf '%sConnection link%s\n  http://%s:%s/connect/%s\n\n' "$BOLD" "$RESET" "$host" "$PORT" "$secret"
 printf '%sKeep this link private — anyone with it can use this Whisper server.%s\n\n' "$DIM" "$RESET"
 printf 'Service\n  sudo systemctl status pssst-whisper\n'
