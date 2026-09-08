@@ -158,7 +158,7 @@ run_step "Installing system packages" apt-get install -y -qq python3 python3-ven
 run_step "Creating Python environment" mkdir -p "$INSTALL_DIR" "$DATA_DIR"
 run_step "Creating virtual environment" python3 -m venv "$INSTALL_DIR/.venv"
 run_step "Updating Python tools" "$INSTALL_DIR/.venv/bin/pip" install --upgrade pip
-run_step "Installing Whisper runtime" "$INSTALL_DIR/.venv/bin/pip" install 'fastapi>=0.115,<1' 'uvicorn[standard]>=0.30,<1' 'python-multipart>=0.0.12,<1' 'faster-whisper>=1.1,<2' 'httpx>=0.27,<1' 'pydantic>=2,<3'
+run_step "Installing Whisper runtime" "$INSTALL_DIR/.venv/bin/pip" install 'fastapi>=0.115,<1' 'uvicorn[standard]>=0.30,<1' 'python-multipart>=0.0.12,<1' 'faster-whisper>=1.1,<2'
 
 cat > "$INSTALL_DIR/worker.py" <<'PSSST_WORKER_PY'
 """Lightweight self-hosted pssst Whisper worker.
@@ -170,11 +170,8 @@ and the raw segment JSON needed for idempotent retries.
 from __future__ import annotations
 import hmac, json, os, secrets
 from pathlib import Path
-from typing import Optional
-import httpx
 from fastapi import FastAPI, Depends, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 from faster_whisper import WhisperModel
 
 ROOT = Path(os.getenv("PSSST_STORAGE_DIR", "/var/lib/pssst-whisper")); ROOT.mkdir(parents=True, exist_ok=True)
@@ -213,32 +210,6 @@ def transcript_path(session_id: str) -> Path: return session_dir(session_id) / "
 def read_transcript(session_id: str) -> list[dict]:
     path = transcript_path(session_id); return json.loads(path.read_text()) if path.exists() else []
 
-CORRECTION_PROMPT = """Tu corriges une transcription automatique de cours universitaire en français.
-Détermine ce que le professeur a réellement dit, sans améliorer sa manière de parler.
-Corrige uniquement les erreurs probables de reconnaissance vocale. Conserve hésitations,
-répétitions, faux départs, expressions orales et grammaire parlée. Ne reformule pas, ne
-résume pas, n'ajoute aucune information et ne corrige pas les faits. Quand une notation
-technique est clairement dictée, écris-la normalement (free tiret h → free -h, égal égal → ==).
-Si c'est incertain, conserve le texte. Retourne uniquement la transcription corrigée.
-Le texte t'est envoyé ligne par ligne, une ligne par segment. Retourne exactement le même
-nombre de lignes, dans le même ordre, une correction par ligne."""
-
-OPENROUTER_ENDPOINT = os.getenv("PSSST_OPENROUTER_ENDPOINT", "https://openrouter.ai/api/v1/chat/completions")
-
-class CorrectRequest(BaseModel):
-    openrouter_api_key: Optional[str] = None
-    openrouter_model: Optional[str] = None
-
-async def _correct_batch(raw_text: str, api_key: str, model: str) -> str:
-    body = {"model": model, "temperature": 0, "messages": [
-        {"role": "system", "content": CORRECTION_PROMPT},
-        {"role": "user", "content": f"Transcription brute:\n{raw_text}"},
-    ]}
-    async with httpx.AsyncClient(timeout=90) as client:
-        response = await client.post(OPENROUTER_ENDPOINT, json=body, headers={"Authorization": f"Bearer {api_key}"})
-        response.raise_for_status()
-    return response.json()["choices"][0]["message"]["content"].strip()
-
 @app.get("/healthz")
 def health(): return {"status": "ok", "model": MODEL, "quality": QUALITY, "language": LANGUAGE, "device": DEVICE, "compute": COMPUTE}
 @app.get("/connect/{secret}")
@@ -263,39 +234,6 @@ def transcribe(session_id: str, sequence: int):
     rows.sort(key=lambda row: row["start_ms"]); transcript_path(session_id).write_text(json.dumps(rows, ensure_ascii=False, indent=2)); return {"state": "complete", "segment_count": len(rows)}
 @app.get("/v1/sessions/{session_id}/transcript", dependencies=[Depends(auth)])
 def transcript(session_id: str): return read_transcript(session_id)
-@app.post("/v1/sessions/{session_id}/correct", dependencies=[Depends(auth)])
-async def correct(session_id: str, final: bool = False, body: CorrectRequest | None = None):
-    rows = read_transcript(session_id)
-    if not rows: return {"state": "waiting", "segment_count": 0}
-    api_key = (body.openrouter_api_key if body else None) or os.getenv("PSSST_OPENROUTER_API_KEY")
-    model = (body.openrouter_model if body else None) or os.getenv("PSSST_OPENROUTER_MODEL")
-    if not api_key or not model: return {"state": "blocked", "detail": "OpenRouter not configured", "segment_count": 0}
-    BATCH_MS = 60_000; groups: list[list[int]] = []
-    for i, row in enumerate(rows):
-        if not groups: groups.append([i]); continue
-        current = groups[-1]; window_start = rows[current[0]]["start_ms"]
-        if row["start_ms"] - window_start >= BATCH_MS: groups.append([i])
-        else: current.append(i)
-    try:
-        for group in groups:
-            raw_lines = [rows[idx]["raw_text"] for idx in group]
-            joined = "\n".join(raw_lines)
-            corrected_joined = await _correct_batch(joined, api_key, model)
-            corrected_lines = corrected_joined.strip().splitlines()
-            if len(corrected_lines) == len(group):
-                for j, idx in enumerate(group):
-                    if final: rows[idx]["final_text"] = corrected_lines[j].strip()
-                    else: rows[idx]["corrected_text"] = corrected_lines[j].strip()
-            else:
-                if final: rows[group[0]]["final_text"] = corrected_joined
-                else: rows[group[0]]["corrected_text"] = corrected_joined
-                for idx in group[1:]:
-                    if final: rows[idx]["final_text"] = ""
-                    else: rows[idx]["corrected_text"] = ""
-        transcript_path(session_id).write_text(json.dumps(rows, ensure_ascii=False, indent=2))
-    except Exception as error:
-        return {"state": "failed", "detail": str(error), "segment_count": 0}
-    return {"state": "complete", "segment_count": len(rows), "final": final}
 PSSST_WORKER_PY
 
 run_step "Validating worker" "$INSTALL_DIR/.venv/bin/python" -m py_compile "$INSTALL_DIR/worker.py"
