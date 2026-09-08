@@ -1401,6 +1401,13 @@ h1 em {
 .settings-form {
   min-width: 0;
 }
+.app-version {
+  color: #8a9188;
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  margin-top: 14px;
+}
 .settings-section {
   background: rgba(255, 255, 255, 0.58);
   border: 1px solid #dedbd2;

@@ -968,6 +968,7 @@ function Settings() {
           <br />
           <em>manière.</em>
         </h1>
+        <small className="app-version">Pssst v0.12.23</small>
       </div>
       <section className="settings-form">
         <section className="settings-section account-section">
