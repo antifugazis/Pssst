@@ -158,6 +158,7 @@ from __future__ import annotations
 import hmac, json, os, secrets
 from pathlib import Path
 from fastapi import FastAPI, Depends, Header, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from faster_whisper import WhisperModel
 
 ROOT = Path(os.getenv("PSSST_STORAGE_DIR", "/var/lib/pssst-whisper")); ROOT.mkdir(parents=True, exist_ok=True)
@@ -169,6 +170,19 @@ DEVICE = os.getenv("PSSST_DEVICE", "cpu"); COMPUTE = os.getenv("PSSST_COMPUTE_TY
 QUALITY = os.getenv("PSSST_QUALITY", "balanced")
 model = WhisperModel(MODEL, device=DEVICE, compute_type=COMPUTE)
 app = FastAPI(title="pssst Whisper server", version="1.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:1420",
+        "http://127.0.0.1:1420",
+        "tauri://localhost",
+        "http://tauri.localhost",
+        "https://tauri.localhost",
+    ],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 def auth(authorization: str | None = Header(default=None)):
     if not hmac.compare_digest((authorization or "").removeprefix("Bearer "), SECRET): raise HTTPException(401, "Invalid pssst connection")
