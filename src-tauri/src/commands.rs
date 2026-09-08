@@ -3,7 +3,7 @@ use std::{path::PathBuf, sync::Mutex};
 use tauri::State;
 use uuid::Uuid;
 
-use crate::{capture::{CaptureApplication, CaptureBackend, CapturePermission}, recording::{RecordingService, RecordingSnapshot, StartRecordingRequest}};
+use crate::{capture::{CaptureApplication, CaptureBackend, CaptureError, CapturePermission}, recording::{RecordingService, RecordingSnapshot, StartRecordingRequest}};
 
 #[cfg(target_os = "macos")]
 #[link(name = "CoreGraphics", kind = "framework")]
@@ -35,7 +35,21 @@ pub fn list_capture_applications() -> Result<Vec<CaptureApplication>, String> {
     let backend = crate::capture::macos::MacCaptureBackend::new();
     #[cfg(not(target_os = "macos"))]
     let backend = crate::capture::simulated::SimulatedCaptureBackend::default();
-    backend.list_applications().map_err(|error| error.to_string())
+    match backend.list_applications() {
+        Ok(applications) => Ok(applications),
+        Err(CaptureError::PermissionRequired) => {
+            #[cfg(target_os = "macos")]
+            if unsafe { CGPreflightScreenCaptureAccess() } {
+                // TCC says access is already granted; ScreenCaptureKit can
+                // still briefly return no shareable content while macOS
+                // refreshes its running-app snapshot. Let the UI retry
+                // instead of incorrectly showing the permission wall.
+                return Ok(Vec::new());
+            }
+            Err(CaptureError::PermissionRequired.to_string())
+        }
+        Err(error) => Err(error.to_string()),
+    }
 }
 
 #[tauri::command]

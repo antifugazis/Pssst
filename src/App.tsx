@@ -450,7 +450,11 @@ function Setup({
     if (!isTauri()) return;
     void loadApplications();
     window.addEventListener("focus", loadApplications);
-    return () => window.removeEventListener("focus", loadApplications);
+    const retry = window.setInterval(() => void loadApplications(), 2500);
+    return () => {
+      window.removeEventListener("focus", loadApplications);
+      window.clearInterval(retry);
+    };
   }, []);
   const ready = canStartRecording({ source, course });
   const permissionDenied = permissionRequired;
