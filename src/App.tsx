@@ -299,12 +299,12 @@ function Onboarding({ finish }: { finish: () => void }) {
             <div className="model-install server-connect-card">
               <strong>1. Installer pssst Whisper</strong>
               <div className="command-box">
-                <code>curl -fsSL https://raw.githubusercontent.com/pssst/pssst/main/server/install.sh | sudo bash</code>
+                <code>curl -fsSL https://irisla.com/pssst/install.sh | sudo bash</code>
                 <button
                   className="copy-icon"
                   aria-label="Copier la commande"
                   title="Copier la commande"
-                  onClick={() => navigator.clipboard?.writeText("curl -fsSL https://raw.githubusercontent.com/pssst/pssst/main/server/install.sh | sudo bash")}
+                  onClick={() => navigator.clipboard?.writeText("curl -fsSL https://irisla.com/pssst/install.sh | sudo bash")}
                 >
                   <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>
                 </button>
@@ -955,7 +955,7 @@ function Settings() {
     setAccountEmail("");
     setAccountSaved(false);
   };
-  const install = "curl -fsSL https://raw.githubusercontent.com/pssst/pssst/main/server/install.sh | sudo bash";
+  const install = "curl -fsSL https://irisla.com/pssst/install.sh | sudo bash";
   return (
     <main className="settings-page">
       <div>
@@ -1011,8 +1011,17 @@ function Settings() {
             <div className="server-setup-note">
               <strong>Vous avez un serveur Linux&nbsp;?</strong>
               <small>Copiez cette commande dans son terminal, puis collez ici le lien qu’il vous donne.</small>
-              <code>{install}</code>
-              <button onClick={() => { navigator.clipboard?.writeText(install); setCopied(true); }}>{copied ? "Commande copiée" : "Copier la commande"}</button>
+              <div className="command-box settings-command-box">
+                <code>{install}</code>
+                <button
+                  className="copy-icon"
+                  aria-label="Copier la commande"
+                  title={copied ? "Commande copiée" : "Copier la commande"}
+                  onClick={() => { navigator.clipboard?.writeText(install); setCopied(true); }}
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>
+                </button>
+              </div>
             </div>
             <label>
               <strong>Connection link</strong>

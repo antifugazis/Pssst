@@ -1003,6 +1003,16 @@ h1 em {
 .command-box code {
   padding-right: 54px;
 }
+.settings-command-box code {
+  display: block;
+  overflow: auto;
+  padding: 10px 50px 10px 10px;
+  border-radius: 7px;
+  background: #f0eee8;
+  color: #536251;
+  font: 10px "DM Mono", monospace;
+  white-space: nowrap;
+}
 .copy-icon {
   position: absolute;
   top: 50%;
