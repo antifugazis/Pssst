@@ -55,8 +55,8 @@ run_step() {
   info "${label}"
   if "$@" >>"$LOG_FILE" 2>&1; then success "$label"; else fail; fi
 }
-prompt() {
-  local answer
+prompt_into() {
+  local variable_name="$1" answer
   if [[ -t 0 ]]; then
     read -r answer
   elif [[ -r /dev/tty ]] && { read -r answer </dev/tty; } 2>/dev/null; then
@@ -69,7 +69,7 @@ prompt() {
     printf '  curl -fsSL https://irisla.com/pssst/install.sh -o /tmp/pssst-install.sh && sudo bash /tmp/pssst-install.sh\n' >&2
     exit 1
   fi
-  printf '%s\n' "$answer"
+  printf -v "$variable_name" '%s' "$answer"
 }
 
 if [[ "$(id -u)" != "0" && "${PSSST_TEST_ONLY:-0}" != "1" ]]; then echo "Run this installer as root: sudo bash" >&2; exit 1; fi
@@ -99,7 +99,7 @@ model="${PSSST_MODEL:-}"
 if [[ -z "$model" ]]; then
   section "Whisper model"
   printf '  1  Small\n     Faster, lighter\n  2  Medium\n     Best balance of accuracy and speed\n  3  Large-v3\n     Highest accuracy, much heavier\n\nChoose a model [%s]: ' "$([[ "$recommended_model" == small ]] && echo 1 || echo 2)"
-  model_choice="$(prompt)"
+  prompt_into model_choice
   case "${model_choice:-r}" in
     1) model=small;; 2) model=medium;; 3) model=large-v3;; r|R) model="$recommended_model";; *) model="$recommended_model";;
   esac
@@ -109,7 +109,7 @@ quality="${PSSST_QUALITY:-}"
 if [[ -z "$quality" ]]; then
   section "Processing"
   printf '  1  Fast\n  2  Balanced\n  3  Best accuracy\n\nChoose a preset [2]: '
-  quality_choice="$(prompt)"
+  prompt_into quality_choice
   case "${quality_choice:-2}" in 1) quality=fast;; 3) quality=best;; *) quality=balanced;; esac
 fi
 
@@ -117,7 +117,7 @@ language="${PSSST_LANGUAGE:-fr}"
 if [[ -z "${PSSST_LANGUAGE:-}" ]]; then
   section "Language"
   printf '  1  French\n\nChoose a language [1]: '
-  language_choice="$(prompt)"
+  prompt_into language_choice
   language=fr
 fi
 
