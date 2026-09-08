@@ -61,8 +61,13 @@ prompt() {
     read -r answer
   elif [[ -r /dev/tty ]] && { read -r answer </dev/tty; } 2>/dev/null; then
     :
-  else
+  elif [[ "${PSSST_TEST_ONLY:-0}" == "1" ]]; then
     read -r answer || answer=""
+  else
+    printf '\nInteractive setup needs a real terminal; choices were not applied.\n' >&2
+    printf 'Download the installer first, then run it from an SSH terminal:\n' >&2
+    printf '  curl -fsSL https://irisla.com/pssst/install.sh -o /tmp/pssst-install.sh && sudo bash /tmp/pssst-install.sh\n' >&2
+    exit 1
   fi
   printf '%s\n' "$answer"
 }
