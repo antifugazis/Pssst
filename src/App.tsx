@@ -132,19 +132,33 @@ function Onboarding({ finish }: { finish: () => void }) {
   const [serverReady, setServerReady] = useState(false);
   const [serverError, setServerError] = useState("");
   const connectServer = async () => {
+    const link = serverLink.trim();
     try {
-      const result = await fetch(serverLink).then((response) => {
-        if (!response.ok)
-          throw new Error("Lien invalide ou serveur indisponible");
-        return response.json();
-      });
-      preference.set("pssst.connection-link", serverLink);
+      const url = new URL(link);
+      if (!/^https?:$/.test(url.protocol) || !url.pathname.includes("/connect/")) {
+        throw new Error("Collez le connection link complet de votre serveur Pssst.");
+      }
+      const response = await fetch(url.toString());
+      if (!response.ok) {
+        if (response.status === 401) throw new Error("Ce connection link est invalide ou révoqué.");
+        throw new Error(`Le serveur répond avec une erreur (${response.status}).`);
+      }
+      const result = await response.json();
+      if (!result?.capabilities?.faster_whisper) {
+        throw new Error("Ce serveur n’est pas un serveur Whisper Pssst.");
+      }
+      preference.set("pssst.connection-link", url.toString());
       setServerReady(true);
-      setServerError(`Connecté · Whisper ${result.capabilities.whisper_model}`);
+      setServerLink(url.toString());
+      setServerError(`Connecté - Whisper ${result.capabilities.whisper_model}`);
     } catch (error) {
       setServerReady(false);
       setServerError(
-        error instanceof Error ? error.message : "Connexion impossible",
+        error instanceof TypeError
+          ? "Impossible de joindre le serveur. Vérifiez son adresse, son port et son accès réseau."
+          : error instanceof Error
+            ? error.message
+            : "Connexion impossible",
       );
     }
   };
