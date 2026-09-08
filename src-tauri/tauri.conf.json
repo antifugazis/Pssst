@@ -18,8 +18,7 @@
     ],
     "macOS": {
       "minimumSystemVersion": "15.0",
-      "infoPlist": "Info.plist",
-      "signingIdentity": "Apple Development"
+      "infoPlist": "Info.plist"
     }
   }
 }

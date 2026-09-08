@@ -6,12 +6,6 @@ use uuid::Uuid;
 use crate::{capture::{CaptureApplication, CaptureBackend, CaptureError, CapturePermission}, recording::{RecordingService, RecordingSnapshot, StartRecordingRequest}};
 
 #[cfg(target_os = "macos")]
-#[link(name = "CoreGraphics", kind = "framework")]
-extern "C" {
-    fn CGRequestScreenCaptureAccess() -> bool;
-}
-
-#[cfg(target_os = "macos")]
 type PlatformCaptureBackend = crate::capture::macos::MacCaptureBackend;
 #[cfg(not(target_os = "macos"))]
 type PlatformCaptureBackend = crate::capture::simulated::SimulatedCaptureBackend;
@@ -53,10 +47,9 @@ pub fn capture_application_icon(bundle_id: String) -> Option<String> {
 pub fn capture_permission_status() -> Result<CapturePermission, String> {
     #[cfg(target_os = "macos")]
     {
-        // macOS 15's combined “Screen & System Audio Recording” control is
-        // evaluated by ScreenCaptureKit. The older CoreGraphics preflight can
-        // remain false even while this app's System Settings switch is on,
-        // incorrectly hiding every source in Pssst.
+        // Core Audio owns the actual capture path. Do not use a CoreGraphics
+        // or ScreenCaptureKit preflight here: those APIs request screen access
+        // and would make an audio-only recording look like screen sharing.
         return crate::capture::macos::MacCaptureBackend::new()
             .permission_status()
             .map_err(|error| error.to_string());
@@ -73,12 +66,12 @@ pub fn capture_permission_status() -> Result<CapturePermission, String> {
 pub fn open_screen_recording_settings() -> Result<(), String> {
     #[cfg(target_os = "macos")]
     { std::process::Command::new("open")
-        .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
+        .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
         .spawn()
         .map(|_| ())
         .map_err(|error| error.to_string()) }
     #[cfg(not(target_os = "macos"))]
-    { Err("Screen Recording permissions are managed by your operating system.".into()) }
+    { Err("System audio permissions are managed by your operating system.".into()) }
 }
 
 /// Only the explicit first-run action may show the macOS permission prompt.
@@ -91,10 +84,6 @@ pub fn request_screen_recording_access() -> Result<CapturePermission, String> {
         if let Ok(CapturePermission::Granted) = backend.permission_status() {
             return Ok(CapturePermission::Granted);
         }
-        // This may display macOS's first-run prompt. Check via
-        // ScreenCaptureKit afterwards because it is the capture API Pssst
-        // actually uses.
-        unsafe { CGRequestScreenCaptureAccess() };
         backend.permission_status().map_err(|error| error.to_string())
     }
     #[cfg(not(target_os = "macos"))]

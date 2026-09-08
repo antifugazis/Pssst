@@ -22,7 +22,7 @@ pub struct CaptureRequest { pub application: CaptureApplication, pub track: Trac
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct CaptureHandle(pub u64);
 #[derive(Debug, Error)]
-pub enum CaptureError { #[error("Screen Recording permission is required")] PermissionRequired, #[error("The selected application is no longer available")] ApplicationUnavailable, #[error("Capture backend error: {0}")] Backend(String) }
+pub enum CaptureError { #[error("System audio permission is required")] PermissionRequired, #[error("The selected application is no longer available")] ApplicationUnavailable, #[error("Capture backend error: {0}")] Backend(String) }
 
 pub trait CaptureBackend: Send {
     fn list_applications(&self) -> Result<Vec<CaptureApplication>, CaptureError>;

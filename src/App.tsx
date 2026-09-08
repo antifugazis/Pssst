@@ -433,12 +433,8 @@ function Setup({
       const needsPermission = status !== "granted";
       setPermissionRequired(needsPermission);
       if (needsPermission) {
-        // A legacy build can have completed onboarding before Pssst had its
-        // stable signed identity. Ask once from this actual bundle so macOS
-        // creates the TCC entry that ScreenCaptureKit evaluates. This must
-        // be persisted (not a ref) so it fires once ever, not once per
-        // launch — otherwise macOS's permission dialog reappears on every
-        // app start whenever this check is momentarily false.
+        // Keep the probe one-shot so an unavailable audio device never turns
+        // into a repeated permission prompt on every launch.
         if (!preference.get("pssst.requested-legacy-capture-permission")) {
           preference.set("pssst.requested-legacy-capture-permission", "true");
           const granted = await native.requestScreenRecordingAccess();
@@ -482,7 +478,7 @@ function Setup({
     } catch (reason) {
       const message = String(reason);
       setError(message);
-      // Any ScreenCaptureKit/TCC failure is a permission state, not a source
+      // Any Core Audio/TCC failure is a permission state, not a source
       // picker failure. Keep the raw reason for diagnostics, but render the
       // guided permission card so users never see a dead/empty picker.
       if (/permission|tcc|shareable content|capture/i.test(message)) setPermissionRequired(true);
@@ -520,8 +516,8 @@ function Setup({
             <p className="eyebrow">AUTORISATION REQUISE</p>
             <h3>Autorisez pssst à écouter votre cours.</h3>
             <p>
-              macOS bloque l’accès aux applications tant que l’autorisation «
-              Enregistrement de l’écran et audio système » n’est pas activée.
+              macOS bloque l’accès à l’audio des applications tant que
+              l’autorisation audio système n’est pas activée.
             </p>
             <button
               className="record-button"

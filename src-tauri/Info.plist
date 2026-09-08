@@ -3,8 +3,6 @@
 <plist version="1.0"><dict>
   <key>NSMicrophoneUsageDescription</key>
   <string>pssst captures your questions on a separate local audio track when you choose to include your microphone.</string>
-  <key>NSScreenCaptureUsageDescription</key>
-  <string>Pssst needs Screen Recording access to capture audio from the class application you choose.</string>
   <key>NSAudioCaptureUsageDescription</key>
   <string>Pssst captures audio from the class application you choose.</string>
 </dict></plist>
