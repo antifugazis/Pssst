@@ -7,14 +7,14 @@ INSTALL_DIR="${PSSST_INSTALL_DIR:-/opt/pssst-whisper}"
 DATA_DIR="${PSSST_DATA_DIR:-/var/lib/pssst-whisper}"
 LOG_FILE="${PSSST_INSTALL_LOG:-/tmp/pssst-install.log}"
 
-if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
-  BOLD=$'\033[1m'; DIM=$'\033[2m'; GREEN=$'\033[32m'; YELLOW=$'\033[33m'; RESET=$'\033[0m'
+if [[ ( -t 1 || -t /dev/tty ) && -z "${NO_COLOR:-}" ]]; then
+  BOLD=$'\033[1m'; DIM=$'\033[2m'; CYAN=$'\033[36m'; GREEN=$'\033[32m'; YELLOW=$'\033[33m'; RESET=$'\033[0m'
 else
-  BOLD=''; DIM=''; GREEN=''; YELLOW=''; RESET=''
+  BOLD=''; DIM=''; CYAN=''; GREEN=''; YELLOW=''; RESET=''
 fi
 
 section() { printf '\n%s%s%s\n' "$BOLD" "$1" "$RESET"; }
-info() { printf '%s  %s%s\n' "$DIM" "$1" "$RESET"; }
+info() { printf '  %s•%s %s%s%s\n' "$CYAN" "$RESET" "$DIM" "$1" "$RESET"; }
 success() { printf '  %s✓%s %s\n' "$GREEN" "$RESET" "$1"; }
 warn() { printf '  %s! %s%s\n' "$YELLOW" "$1" "$RESET" >&2; }
 pretty() { printf '%s' "$1" | awk '{print toupper(substr($0,1,1)) substr($0,2)}'; }
@@ -101,7 +101,7 @@ export DEBIAN_FRONTEND=noninteractive
 run_step "Installing system dependencies" apt-get update -qq
 run_step "Installing system packages" apt-get install -y -qq python3 python3-venv python3-pip ffmpeg curl ca-certificates
 run_step "Creating Python environment" mkdir -p "$INSTALL_DIR" "$DATA_DIR"
-run_step "Creating Python environment" python3 -m venv "$INSTALL_DIR/.venv"
+run_step "Creating virtual environment" python3 -m venv "$INSTALL_DIR/.venv"
 run_step "Updating Python tools" "$INSTALL_DIR/.venv/bin/pip" install --upgrade pip
 run_step "Installing Whisper runtime" "$INSTALL_DIR/.venv/bin/pip" install 'fastapi>=0.115,<1' 'uvicorn[standard]>=0.30,<1' 'python-multipart>=0.0.12,<1' 'faster-whisper>=1.1,<2'
 
