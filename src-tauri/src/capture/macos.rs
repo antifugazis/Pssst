@@ -68,9 +68,15 @@ impl CaptureBackend for MacCaptureBackend {
         Ok(snapshot.applications.iter().filter(|application| application.process_id > 0).map(|application| CaptureApplication { id: format!("sc-{}", application.process_id), name: application.application_name.clone(), icon_hint: application.bundle_identifier.clone(), icon_data: None, available: true }).collect())
     }
     fn permission_status(&self) -> Result<CapturePermission, CaptureError> {
-        SCShareableContent::get()
-            .map(|_| CapturePermission::Granted)
-            .map_err(|error| CaptureError::Backend(format!("ScreenCaptureKit permission probe failed: {error}")))
+        let content = SCShareableContent::get()
+            .map_err(|error| CaptureError::Backend(format!("ScreenCaptureKit permission probe failed: {error}")))?;
+        let snapshot = content
+            .snapshot()
+            .ok_or_else(|| CaptureError::Backend("ScreenCaptureKit returned no shareable content".into()))?;
+        if snapshot.applications.is_empty() {
+            return Err(CaptureError::Backend("ScreenCaptureKit returned no shareable applications; enable Pssst in Screen & System Audio Recording".into()));
+        }
+        Ok(CapturePermission::Granted)
     }
     fn request_permission(&self) -> Result<CapturePermission, CaptureError> { self.permission_status() }
     fn start_capture(&mut self, request: CaptureRequest, output_path: &Path) -> Result<CaptureHandle, CaptureError> {
