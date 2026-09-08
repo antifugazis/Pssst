@@ -51,7 +51,7 @@ fail() {
 }
 run_step() {
   local label="$1"; shift
-  info "$label…"
+  info "${label}…"
   if "$@" >>"$LOG_FILE" 2>&1; then success "$label"; else fail; fi
 }
 prompt() {
