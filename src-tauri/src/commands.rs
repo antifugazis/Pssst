@@ -91,12 +91,12 @@ pub fn request_screen_recording_access() -> Result<CapturePermission, String> {
 }
 
 #[tauri::command]
-pub fn validate_server_link(link: String) -> Result<serde_json::Value, String> {
+pub fn validate_server_link(controller: State<'_, RecordingController>, link: String) -> Result<serde_json::Value, String> {
     let client = reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_secs(12))
         .build()
         .map_err(|error| error.to_string())?;
-    let response = client.get(link).send().map_err(|error| error.to_string())?;
+    let response = client.get(&link).send().map_err(|error| error.to_string())?;
     let status = response.status();
     if !status.is_success() {
         return Err(format!("Server returned HTTP {}", status.as_u16()));
@@ -105,6 +105,11 @@ pub fn validate_server_link(link: String) -> Result<serde_json::Value, String> {
     if payload.pointer("/capabilities/faster_whisper") != Some(&serde_json::Value::Bool(true)) {
         return Err("This is not a Pssst Whisper server".into());
     }
+    if let Ok(service) = controller.0.lock() {
+        let config_path = service.store().root().join("server-connection.txt");
+        let _ = std::fs::write(config_path, &link);
+    }
+    std::env::set_var("PSSST_CONNECTION_LINK", &link);
     Ok(payload)
 }
 

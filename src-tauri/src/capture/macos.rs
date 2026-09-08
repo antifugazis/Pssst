@@ -1,5 +1,6 @@
 //! macOS audio-only capture using Core Audio process taps.
 use std::{collections::HashMap, fs, path::{Path, PathBuf}, process::Command};
+use serde::Deserialize;
 use super::{CaptureApplication, CaptureBackend, CaptureError, CaptureHandle, CapturePermission, CaptureRequest, TrackKind};
 
 #[link(name = "pssst_core_audio_tap", kind = "static")]
@@ -7,6 +8,7 @@ extern "C" {
     fn pssst_audio_start(pid: i32, path: *const std::ffi::c_char, handle: *mut u64, error: *mut std::ffi::c_char, error_length: usize) -> i32;
     fn pssst_audio_stop(handle: u64, error: *mut std::ffi::c_char, error_length: usize) -> i32;
     fn pssst_audio_permission_probe(error: *mut std::ffi::c_char, error_length: usize) -> i32;
+    fn pssst_audio_list_applications(buffer: *mut std::ffi::c_char, length: usize) -> i32;
 }
 
 pub struct MacCaptureBackend { next_handle: u64, active: HashMap<u64, u64> }
@@ -32,23 +34,23 @@ fn audio_error(buffer: &[std::ffi::c_char]) -> String {
 
 impl MacCaptureBackend { pub fn new() -> Self { Self { next_handle: 1, active: HashMap::new() } } }
 
+#[derive(Deserialize)]
+struct RunningApplication { pid: i32, name: String, bundle_id: String }
+
 impl CaptureBackend for MacCaptureBackend {
     fn list_applications(&self) -> Result<Vec<CaptureApplication>, CaptureError> {
-        let output = Command::new("/bin/ps").args(["-axo", "pid=,comm="]).output().map_err(|error| CaptureError::Backend(error.to_string()))?;
-        let mut apps = Vec::new();
-        for line in String::from_utf8_lossy(&output.stdout).lines() {
-            let mut parts = line.trim().splitn(2, char::is_whitespace);
-            let Some(pid) = parts.next().and_then(|value| value.parse::<i32>().ok()) else { continue };
-            let Some(command) = parts.next().map(str::trim).filter(|value| !value.is_empty()) else { continue };
-            if pid <= 0 || !command.contains(".app/Contents/MacOS/") || command.matches(".app").count() != 1 { continue; }
-            let path = Path::new(command);
-            let name = path.file_stem().and_then(|value| value.to_str()).unwrap_or(command).to_string();
-            if ["ps", "launchservicesd", "runningboardd", "WindowServer", "loginwindow", "kernel_task"].iter().any(|value| value.eq_ignore_ascii_case(&name)) { continue; }
-            let normalized = name.to_ascii_lowercase();
-            let icon_hint = if normalized.contains("zoom") { "us.zoom.xos".to_string() } else if normalized.contains("chrome") { "com.google.Chrome".to_string() } else if normalized.contains("safari") { "com.apple.Safari".to_string() } else { name.clone() };
-            apps.push(CaptureApplication { id: format!("audio-{pid}"), name, icon_hint, icon_data: None, available: true });
+        let mut buffer = vec![0 as std::ffi::c_char; 64 * 1024];
+        if unsafe { pssst_audio_list_applications(buffer.as_mut_ptr(), buffer.len()) } != 0 {
+            return Err(CaptureError::Backend("Could not read the macOS running-application list".into()));
         }
+        let applications: Vec<RunningApplication> = serde_json::from_slice(&buffer.iter().take_while(|byte| **byte != 0).map(|byte| *byte as u8).collect::<Vec<_>>())
+            .map_err(|error| CaptureError::Backend(format!("Could not decode the macOS running-application list: {error}")))?;
+        let mut apps = applications.into_iter()
+            .filter(|application| application.pid > 0)
+            .map(|application| CaptureApplication { id: format!("audio-{}", application.pid), name: application.name, icon_hint: application.bundle_id, icon_data: None, available: true })
+            .collect::<Vec<_>>();
         apps.sort_by(|left, right| left.name.to_lowercase().cmp(&right.name.to_lowercase()));
+        eprintln!("Pssst capture picker: {} regular apps: {}", apps.len(), apps.iter().map(|app| app.name.as_str()).collect::<Vec<_>>().join(", "));
         Ok(apps)
     }
 

@@ -117,7 +117,7 @@ function Header({
       </nav>
       <div className="ready-status">
         <span /> {view === "recording" ? "En cours" : "Prêt"}
-        <small>v0.12.26</small>
+        <small>v0.12.28</small>
       </div>
     </header>
   );
@@ -1009,7 +1009,7 @@ function Settings() {
           <br />
           <em>manière.</em>
         </h1>
-        <small className="app-version">Pssst v0.12.26</small>
+        <small className="app-version">Pssst v0.12.28</small>
       </div>
       <section className="settings-form">
         <section className="settings-section account-section">

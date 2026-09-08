@@ -79,6 +79,7 @@ impl<B: CaptureBackend> RecordingService<B> {
         Ok(snapshot(stopped))
     }
 
+    pub fn store(&self) -> &SessionStore { &self.store }
     pub fn get(&self, id: Uuid) -> Result<RecordingSnapshot> { Ok(snapshot(self.store.load(&id)?)) }
     pub fn track_path(&self, id: Uuid, kind: TrackKind) -> Result<PathBuf> {
         let session = self.store.load(&id)?;
