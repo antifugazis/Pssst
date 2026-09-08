@@ -30,10 +30,10 @@ static void set_status_error(char *buffer, size_t length, const char *prefix, OS
 
 static void write_wav_header(FILE *file, uint32_t dataLength) {
     uint32_t riffLength = 36u + dataLength;
-    uint16_t format = 3; // IEEE float
+    uint16_t format = 1; // PCM signed integer
     uint16_t channels = 2;
     uint32_t sampleRate = 48000;
-    uint16_t bits = 32;
+    uint16_t bits = 16;
     uint16_t blockAlign = channels * bits / 8;
     uint32_t byteRate = sampleRate * blockAlign;
     fseek(file, 0, SEEK_SET);
@@ -52,12 +52,36 @@ static OSStatus render_callback(void *refCon, AudioUnitRenderActionFlags *flags,
     if (!capture || !capture->file) return noErr;
     OSStatus status = AudioUnitRender(capture->unit, flags, timestamp, 1, frames, ioData);
     if (status != noErr) return status;
-    for (UInt32 index = 0; index < ioData->mNumberBuffers; index++) {
-        AudioBuffer *buffer = &ioData->mBuffers[index];
+    if (ioData->mNumberBuffers == 1) {
+        AudioBuffer *buffer = &ioData->mBuffers[0];
         if (buffer->mData && buffer->mDataByteSize > 0) {
-            fwrite(buffer->mData, 1, buffer->mDataByteSize, capture->file);
-            capture->bytes += buffer->mDataByteSize;
+            float *samples = (float *)buffer->mData;
+            UInt32 sampleCount = buffer->mDataByteSize / sizeof(float);
+            for (UInt32 sample = 0; sample < sampleCount; sample++) {
+                float value = samples[sample] < -1.0f ? -1.0f : (samples[sample] > 1.0f ? 1.0f : samples[sample]);
+                int16_t pcm = (int16_t)(value * 32767.0f);
+                fwrite(&pcm, sizeof(pcm), 1, capture->file);
+            }
+            capture->bytes += (uint64_t)sampleCount * sizeof(int16_t);
         }
+    } else if (ioData->mNumberBuffers >= 2) {
+        // HAL can still return one non-interleaved buffer per channel even
+        // when the stream format request is accepted. Interleave the first
+        // two float channels so the WAV header remains truthful.
+        AudioBuffer *left = &ioData->mBuffers[0];
+        AudioBuffer *right = &ioData->mBuffers[1];
+        UInt32 leftFrames = left->mDataByteSize / sizeof(float);
+        UInt32 rightFrames = right->mDataByteSize / sizeof(float);
+        UInt32 count = leftFrames < rightFrames ? leftFrames : rightFrames;
+        float *leftSamples = (float *)left->mData;
+        float *rightSamples = (float *)right->mData;
+        for (UInt32 frame = 0; frame < count; frame++) {
+            float leftValue = leftSamples[frame] < -1.0f ? -1.0f : (leftSamples[frame] > 1.0f ? 1.0f : leftSamples[frame]);
+            float rightValue = rightSamples[frame] < -1.0f ? -1.0f : (rightSamples[frame] > 1.0f ? 1.0f : rightSamples[frame]);
+            int16_t pair[2] = { (int16_t)(leftValue * 32767.0f), (int16_t)(rightValue * 32767.0f) };
+            fwrite(pair, sizeof(int16_t), 2, capture->file);
+        }
+        capture->bytes += (uint64_t)count * sizeof(int16_t) * 2;
     }
     return noErr;
 }
