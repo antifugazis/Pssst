@@ -6,6 +6,12 @@ use uuid::Uuid;
 use crate::{capture::{CaptureApplication, CaptureBackend, CapturePermission}, recording::{RecordingService, RecordingSnapshot, StartRecordingRequest}};
 
 #[cfg(target_os = "macos")]
+#[link(name = "CoreGraphics", kind = "framework")]
+extern "C" {
+    fn CGRequestScreenCaptureAccess() -> bool;
+}
+
+#[cfg(target_os = "macos")]
 type PlatformCaptureBackend = crate::capture::macos::MacCaptureBackend;
 #[cfg(not(target_os = "macos"))]
 type PlatformCaptureBackend = crate::capture::simulated::SimulatedCaptureBackend;
@@ -43,7 +49,8 @@ pub fn capture_permission_status() -> Result<CapturePermission, String> {
 #[tauri::command]
 pub fn open_screen_recording_settings() -> Result<(), String> {
     #[cfg(target_os = "macos")]
-    { std::process::Command::new("open")
+    { unsafe { CGRequestScreenCaptureAccess(); }
+      std::process::Command::new("open")
         .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
         .spawn()
         .map(|_| ())
