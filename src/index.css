@@ -76,6 +76,25 @@ input:focus-visible {
   gap: 9px;
   letter-spacing: -0.06em;
 }
+.brand-logo {
+  display: block;
+  width: 72px;
+  height: 28px;
+  border-radius: 4px;
+  object-fit: cover;
+  object-position: center;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 .brand-mark {
   background: #1f2521;
   border-radius: 8px;

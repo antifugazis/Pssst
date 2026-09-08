@@ -5,6 +5,7 @@ import { MicrophoneToggle } from "./components/MicrophoneToggle";
 import { SourcePicker } from "./components/SourcePicker";
 import { canStartRecording } from "./features/recording/setup";
 import type { CaptureSource } from "./features/recording/types";
+import pssstLogo from "./assets/pssst-logo.png";
 import {
   isTauri,
   native,
@@ -90,12 +91,7 @@ const preference = {
 };
 
 function Logo() {
-  return (
-    <div aria-hidden="true" className="brand-mark">
-      <span />
-      <i />
-    </div>
-  );
+  return <img aria-hidden="true" className="brand-logo" src={pssstLogo} alt="" />;
 }
 function Header({
   view,
@@ -108,7 +104,7 @@ function Header({
     <header className="app-header product-header">
       <button className="brand brand-button" onClick={() => setView("setup")}>
         <Logo />
-        <span>Pssst</span>
+        <span className="sr-only">Pssst</span>
       </button>
       {view !== "setup" && (
         <nav>
@@ -189,7 +185,7 @@ function Onboarding({ finish }: { finish: () => void }) {
       <div className="onboarding-top">
         <button className="brand brand-button">
           <Logo />
-          <span>Pssst</span>
+          <span className="sr-only">Pssst</span>
         </button>
         <span>{step + 1} / 6</span>
       </div>
