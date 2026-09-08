@@ -95,7 +95,22 @@ section "Recommended"
 printf '  %s / %s / Balanced\n' "$(pretty "$recommended_model")" "$recommended_compute"
 if [[ "$ram_gb" =~ ^[0-9]+$ ]] && (( ram_gb >= 3 && ram_gb < 6 )); then info "Medium is heavier on this machine; available swap is recommended."; fi
 
-model="${PSSST_MODEL:-}"
+service_file="/etc/systemd/system/pssst-whisper.service"
+service_value() { sed -n "s/^Environment=$1=//p" "$service_file" 2>/dev/null | head -n 1; }
+if [[ -f "$service_file" && "${PSSST_RECONFIGURE:-0}" != "1" ]]; then
+  model="${PSSST_MODEL:-$(service_value PSSST_MODEL)}"
+  quality="${PSSST_QUALITY:-$(service_value PSSST_QUALITY)}"
+  language="${PSSST_LANGUAGE:-$(service_value PSSST_LANGUAGE)}"
+  if [[ -z "$PORT" ]]; then
+    PORT="$(sed -n 's/.*--port \([0-9][0-9]*\).*/\1/p' "$service_file" | head -n 1)"
+  fi
+  info "Existing configuration found; keeping $(pretty "${model:-$recommended_model}") / $(pretty "${quality:-balanced}") / French."
+else
+  model="${PSSST_MODEL:-}"
+  quality="${PSSST_QUALITY:-}"
+  language="${PSSST_LANGUAGE:-fr}"
+fi
+
 if [[ -z "$model" ]]; then
   section "Whisper model"
   printf '  1  Small\n     Faster, lighter\n  2  Medium\n     Best balance of accuracy and speed\n  3  Large-v3\n     Highest accuracy, much heavier\n\nChoose a model [%s]: ' "$([[ "$recommended_model" == small ]] && echo 1 || echo 2)"
@@ -105,7 +120,6 @@ if [[ -z "$model" ]]; then
   esac
 fi
 
-quality="${PSSST_QUALITY:-}"
 if [[ -z "$quality" ]]; then
   section "Processing"
   printf '  1  Fast\n  2  Balanced\n  3  Best accuracy\n\nChoose a preset [2]: '
@@ -113,8 +127,7 @@ if [[ -z "$quality" ]]; then
   case "${quality_choice:-2}" in 1) quality=fast;; 3) quality=best;; *) quality=balanced;; esac
 fi
 
-language="${PSSST_LANGUAGE:-fr}"
-if [[ -z "${PSSST_LANGUAGE:-}" ]]; then
+if [[ -z "$language" ]]; then
   section "Language"
   printf '  1  French\n\nChoose a language [1]: '
   prompt_into language_choice
