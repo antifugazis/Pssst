@@ -74,11 +74,18 @@ pub fn run_correction(store: &SessionStore, id: Uuid) -> Result<()> {
             anyhow::bail!("OpenRouter returned HTTP {}: {}", response.status(), response.text().unwrap_or_default());
         }
         let result: serde_json::Value = response.json()?;
-        let corrected_joined = result["choices"][0]["message"]["content"]
+        let mut corrected_joined = result["choices"][0]["message"]["content"]
             .as_str()
             .context("OpenRouter returned no content")?
             .trim()
             .to_string();
+        // Strip common prefixes the model adds despite instructions.
+        for prefix in ["Transcription corrigée :", "Transcription corrigée:", "Transcription corrigée", "Voici la transcription corrigée :"] {
+            if let Some(rest) = corrected_joined.strip_prefix(prefix) {
+                corrected_joined = rest.trim().to_string();
+                break;
+            }
+        }
         let corrected_lines: Vec<&str> = corrected_joined.lines().collect();
         if corrected_lines.len() == group.len() {
             for (j, &i) in group.iter().enumerate() {
@@ -86,12 +93,19 @@ pub fn run_correction(store: &SessionStore, id: Uuid) -> Result<()> {
                 updated.transcript_segments[i].final_text = Some(corrected_lines[j].trim().to_string());
             }
         } else {
-            // Model returned wrong line count: assign whole correction to first segment.
-            updated.transcript_segments[group[0]].corrected_text = Some(corrected_joined.clone());
-            updated.transcript_segments[group[0]].final_text = Some(corrected_joined);
-            for &i in &group[1..] {
-                updated.transcript_segments[i].corrected_text = Some(String::new());
-                updated.transcript_segments[i].final_text = Some(String::new());
+            // Line count mismatch: distribute what we can, keep raw for the rest.
+            // This avoids dumping the whole batch into one segment (which causes
+            // duplication when the other segments fall back to raw text).
+            for (j, &i) in group.iter().enumerate() {
+                if j < corrected_lines.len() {
+                    updated.transcript_segments[i].corrected_text = Some(corrected_lines[j].trim().to_string());
+                    updated.transcript_segments[i].final_text = Some(corrected_lines[j].trim().to_string());
+                } else {
+                    // Keep raw text as the corrected text so there's no duplication.
+                    let raw = updated.transcript_segments[i].raw_text.clone();
+                    updated.transcript_segments[i].corrected_text = Some(raw.clone());
+                    updated.transcript_segments[i].final_text = Some(raw);
+                }
             }
         }
     }
