@@ -65,7 +65,11 @@ impl CaptureBackend for MacCaptureBackend {
         // the application list is already visible.
         Ok(snapshot.applications.iter().filter(|application| application.process_id > 0).map(|application| CaptureApplication { id: format!("sc-{}", application.process_id), name: application.application_name.clone(), icon_hint: application.bundle_identifier.clone(), icon_data: None, available: true }).collect())
     }
-    fn permission_status(&self) -> Result<CapturePermission, CaptureError> { SCShareableContent::get().map(|_| CapturePermission::Granted).map_err(|_| CaptureError::PermissionRequired) }
+    fn permission_status(&self) -> Result<CapturePermission, CaptureError> {
+        SCShareableContent::get()
+            .map(|_| CapturePermission::Granted)
+            .map_err(|error| CaptureError::Backend(format!("ScreenCaptureKit permission probe failed: {error}")))
+    }
     fn request_permission(&self) -> Result<CapturePermission, CaptureError> { self.permission_status() }
     fn start_capture(&mut self, request: CaptureRequest, output_path: &Path) -> Result<CaptureHandle, CaptureError> {
         let pid = request.application.id.strip_prefix("sc-").and_then(|id| id.parse::<i32>().ok()).ok_or(CaptureError::ApplicationUnavailable)?;

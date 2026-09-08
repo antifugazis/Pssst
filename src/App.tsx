@@ -425,7 +425,6 @@ function Setup({
   const [error, setError] = useState("");
   const [permissionRequired, setPermissionRequired] = useState(false);
   const requestedIcons = useRef(new Set<string>());
-  const requestedSystemCapturePermission = useRef(false);
   const loadApplications = async () => {
     if (!isTauri()) return;
     try {
@@ -435,9 +434,12 @@ function Setup({
       if (needsPermission) {
         // A legacy build can have completed onboarding before Pssst had its
         // stable signed identity. Ask once from this actual bundle so macOS
-        // creates the TCC entry that ScreenCaptureKit evaluates.
-        if (!requestedSystemCapturePermission.current) {
-          requestedSystemCapturePermission.current = true;
+        // creates the TCC entry that ScreenCaptureKit evaluates. This must
+        // be persisted (not a ref) so it fires once ever, not once per
+        // launch — otherwise macOS's permission dialog reappears on every
+        // app start whenever this check is momentarily false.
+        if (!preference.get("pssst.requested-legacy-capture-permission")) {
+          preference.set("pssst.requested-legacy-capture-permission", "true");
           const granted = await native.requestScreenRecordingAccess();
           if (granted) await loadApplications();
         }
@@ -477,7 +479,12 @@ function Setup({
       })();
       setError("");
     } catch (reason) {
-      setError(String(reason));
+      const message = String(reason);
+      setError(message);
+      // Any ScreenCaptureKit/TCC failure is a permission state, not a source
+      // picker failure. Keep the raw reason for diagnostics, but render the
+      // guided permission card so users never see a dead/empty picker.
+      if (/permission|tcc|shareable content|capture/i.test(message)) setPermissionRequired(true);
     }
   };
   useEffect(() => {
@@ -489,7 +496,9 @@ function Setup({
     };
   }, []);
   const ready = canStartRecording({ source, course });
-  const permissionDenied = permissionRequired;
+  const permissionDenied =
+    permissionRequired ||
+    /permission|tcc|shareable content|capture/i.test(error);
   return (
     <main className="setup">
       <section className="setup-intro">
