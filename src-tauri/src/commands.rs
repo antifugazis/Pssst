@@ -158,8 +158,7 @@ pub fn correct_session(controller: State<'_, RecordingController>, session_id: S
         let service = controller.0.lock().map_err(|_| "The recording service is unavailable".to_string())?;
         service.store().clone()
     };
-    // Reuse the processing worker so the existing connection + OpenRouter
-    // config plumbing handles the request. Spawn detached so the UI stays responsive.
-    crate::recording::spawn_correction(&store, id);
-    Ok(())
+    // Run correction synchronously so the UI stays in "Correction en cours…"
+    // until it actually finishes, and errors are surfaced to the user.
+    crate::recording::run_correction(&store, id).map_err(|e| e.to_string())
 }

@@ -992,7 +992,7 @@ function Detail({
                 setCorrectionMessage("");
                 try {
                   await native.correctSession(session.id);
-                  setCorrectionMessage("Correction lancée. Les segments corrigés apparaîtront ici.");
+                  setCorrectionMessage("Correction terminée.");
                 } catch (error) {
                   setCorrectionMessage(String(error));
                 } finally {

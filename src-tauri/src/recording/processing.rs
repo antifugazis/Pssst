@@ -27,21 +27,10 @@ pub fn resume_pending(store: SessionStore) {
 /// locally on the desktop — it calls OpenRouter directly with the user's own
 /// API key and stores corrected text in the local manifest. The Whisper server
 /// is not involved in correction at all.
-pub fn spawn_correction(store: &SessionStore, id: Uuid) {
-    let store = store.clone();
-    let _ = thread::Builder::new()
-        .name(format!("pssst-correction-{id}"))
-        .spawn(move || {
-            match run_correction(&store, id) {
-                Ok(()) => eprintln!("pssst correction: completed for {id}"),
-                Err(error) => eprintln!("pssst correction: {error:#} for {id}"),
-            }
-        });
-}
 
 const CORRECTION_PROMPT: &str = "Tu corriges une transcription automatique de cours universitaire en français.\nDétermine ce que le professeur a réellement dit, sans améliorer sa manière de parler.\nCorrige uniquement les erreurs probables de reconnaissance vocale. Conserve hésitations,\nrépétitions, faux départs, expressions orales et grammaire parlée. Ne reformule pas, ne\nrésume pas, n'ajoute aucune information et ne corrige pas les faits. Quand une notation\ntechnique est clairement dictée, écris-la normalement (free tiret h → free -h, égal égal → ==).\nSi c'est incertain, conserve le texte. Retourne uniquement la transcription corrigée.\nLe texte t'est envoyé ligne par ligne, une ligne par segment. Retourne exactement le même\nnombre de lignes, dans le même ordre, une correction par ligne.";
 
-fn run_correction(store: &SessionStore, id: Uuid) -> Result<()> {
+pub fn run_correction(store: &SessionStore, id: Uuid) -> Result<()> {
     let (api_key, model) = openrouter_config(store).context("OpenRouter is not configured. Save your API key and model in Settings.")?;
     let session = store.load(&id)?;
     if session.transcript_segments.is_empty() {
