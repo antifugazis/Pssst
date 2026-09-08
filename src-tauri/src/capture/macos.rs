@@ -78,24 +78,19 @@ impl CaptureBackend for MacCaptureBackend {
     fn start_capture(&mut self, request: CaptureRequest, output_path: &Path) -> Result<CaptureHandle, CaptureError> {
         let pid = request.application.id.strip_prefix("sc-").and_then(|id| id.parse::<i32>().ok()).ok_or(CaptureError::ApplicationUnavailable)?;
         let content = SCShareableContent::get().map_err(|error| CaptureError::Backend(format!("ScreenCaptureKit could not start capture: {error}")))?;
-        // Use a window-scoped filter rather than a whole-display filter. The
-        // stream still uses ScreenCaptureKit's audio channel, but macOS will
-        // not treat the entire desktop as the content Pssst is sharing.
-        let window = content.windows().into_iter().find(|window| {
-            window.is_on_screen()
-                && window
-                    .owning_application()
-                    .map(|application| application.process_id() == pid)
-                    .unwrap_or(false)
-        }).ok_or_else(|| CaptureError::Backend("The selected application has no capturable window".into()))?;
-        let filter = SCContentFilter::create().with_window(&window).build();
+        // ScreenCaptureKit's application-audio channel requires a display
+        // filter on current macOS releases. We attach a discard-only video
+        // handler below: no video is written or retained by Pssst.
+        let display = content.displays().first().cloned().ok_or_else(|| CaptureError::Backend("No active display is available".into()))?;
+        let application = content.applications().iter().find(|application| application.process_id() == pid).cloned().ok_or(CaptureError::ApplicationUnavailable)?;
+        let filter = SCContentFilter::create().with_display(&display).with_including_applications(&[&application], &[]).build();
         let config = SCStreamConfiguration::new().with_captures_audio(true).with_sample_rate(48_000).with_channel_count(2).with_captures_microphone(matches!(request.track, TrackKind::Microphone));
         let writer = Arc::new(Mutex::new(WavWriter::create(output_path)?)); let mut stream = SCStream::new(&filter, &config);
         let output = match request.track { TrackKind::Application => SCStreamOutputType::Audio, TrackKind::Microphone => SCStreamOutputType::Microphone };
         stream.add_output_handler(AudioHandler { writer: writer.clone() }, output).ok_or_else(|| CaptureError::Backend("Could not attach the audio output handler".into()))?;
-        // A window-scoped SCStream still produces video frames internally.
-        // Consume and discard them so ScreenCaptureKit does not report a
-        // missing output or retain frames; only the audio handler writes data.
+        // ScreenCaptureKit produces video frames internally for this audio
+        // filter. Consume and discard them so only the audio handler writes
+        // data; no screen/video file is ever created.
         stream.add_output_handler(DiscardVideoHandler, SCStreamOutputType::Screen).ok_or_else(|| CaptureError::Backend("Could not attach the discard video handler".into()))?;
         stream.start_capture().map_err(|error| CaptureError::Backend(error.to_string()))?;
         let handle = self.next_handle; self.next_handle += 1; self.active.insert(handle, ActiveCapture { stream, writer }); Ok(CaptureHandle(handle))
