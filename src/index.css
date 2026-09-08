@@ -1393,6 +1393,10 @@ h1 em {
   color: #738073;
   margin: 25px;
 }
+.finalizing .record-button {
+  display: block;
+  margin: 40px auto 0;
+}
 .library-title h1,
 .settings-page h1,
 .detail-head h1 {
