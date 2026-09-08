@@ -47,43 +47,43 @@ static void write_wav_header(FILE *file, uint32_t dataLength) {
 static OSStatus render_callback(void *refCon, AudioUnitRenderActionFlags *flags,
                                 const AudioTimeStamp *timestamp, UInt32 bus,
                                 UInt32 frames, AudioBufferList *ioData) {
-    (void)flags; (void)timestamp; (void)bus;
+    (void)ioData;
     PssstCapture *capture = (PssstCapture *)refCon;
-    if (!capture || !capture->file) return noErr;
-    OSStatus status = AudioUnitRender(capture->unit, flags, timestamp, 1, frames, ioData);
-    if (status != noErr) return status;
-    if (ioData->mNumberBuffers == 1) {
-        AudioBuffer *buffer = &ioData->mBuffers[0];
-        if (buffer->mData && buffer->mDataByteSize > 0) {
-            float *samples = (float *)buffer->mData;
-            UInt32 sampleCount = buffer->mDataByteSize / sizeof(float);
-            for (UInt32 sample = 0; sample < sampleCount; sample++) {
-                float value = samples[sample] < -1.0f ? -1.0f : (samples[sample] > 1.0f ? 1.0f : samples[sample]);
-                int16_t pcm = (int16_t)(value * 32767.0f);
-                fwrite(&pcm, sizeof(pcm), 1, capture->file);
+    if (!capture || !capture->file || frames == 0) return noErr;
+
+    UInt32 byteSize = frames * 2 * sizeof(float);
+    float stackBuffer[4096 * 2];
+    float *sampleBuffer = (frames <= 4096) ? stackBuffer : (float *)malloc(byteSize);
+    if (!sampleBuffer) return noErr;
+
+    AudioBufferList bufferList;
+    bufferList.mNumberBuffers = 1;
+    bufferList.mBuffers[0].mNumberChannels = 2;
+    bufferList.mBuffers[0].mDataByteSize = byteSize;
+    bufferList.mBuffers[0].mData = sampleBuffer;
+
+    OSStatus status = AudioUnitRender(capture->unit, flags, timestamp, bus, frames, &bufferList);
+    if (status == noErr && bufferList.mBuffers[0].mData && bufferList.mBuffers[0].mDataByteSize > 0) {
+        float *samples = (float *)bufferList.mBuffers[0].mData;
+        UInt32 sampleCount = bufferList.mBuffers[0].mDataByteSize / sizeof(float);
+
+        int16_t pcmStack[4096 * 2];
+        int16_t *pcmBuffer = (sampleCount <= 4096 * 2) ? pcmStack : (int16_t *)malloc(sampleCount * sizeof(int16_t));
+        if (pcmBuffer) {
+            for (UInt32 i = 0; i < sampleCount; i++) {
+                float v = samples[i] < -1.0f ? -1.0f : (samples[i] > 1.0f ? 1.0f : samples[i]);
+                pcmBuffer[i] = (int16_t)(v * 32767.0f);
             }
+            fwrite(pcmBuffer, sizeof(int16_t), sampleCount, capture->file);
             capture->bytes += (uint64_t)sampleCount * sizeof(int16_t);
+            if (pcmBuffer != pcmStack) free(pcmBuffer);
         }
-    } else if (ioData->mNumberBuffers >= 2) {
-        // HAL can still return one non-interleaved buffer per channel even
-        // when the stream format request is accepted. Interleave the first
-        // two float channels so the WAV header remains truthful.
-        AudioBuffer *left = &ioData->mBuffers[0];
-        AudioBuffer *right = &ioData->mBuffers[1];
-        UInt32 leftFrames = left->mDataByteSize / sizeof(float);
-        UInt32 rightFrames = right->mDataByteSize / sizeof(float);
-        UInt32 count = leftFrames < rightFrames ? leftFrames : rightFrames;
-        float *leftSamples = (float *)left->mData;
-        float *rightSamples = (float *)right->mData;
-        for (UInt32 frame = 0; frame < count; frame++) {
-            float leftValue = leftSamples[frame] < -1.0f ? -1.0f : (leftSamples[frame] > 1.0f ? 1.0f : leftSamples[frame]);
-            float rightValue = rightSamples[frame] < -1.0f ? -1.0f : (rightSamples[frame] > 1.0f ? 1.0f : rightSamples[frame]);
-            int16_t pair[2] = { (int16_t)(leftValue * 32767.0f), (int16_t)(rightValue * 32767.0f) };
-            fwrite(pair, sizeof(int16_t), 2, capture->file);
-        }
-        capture->bytes += (uint64_t)count * sizeof(int16_t) * 2;
     }
-    return noErr;
+
+    if (sampleBuffer != stackBuffer) {
+        free(sampleBuffer);
+    }
+    return status;
 }
 
 static AudioObjectID process_object_for_pid(pid_t pid) {
@@ -144,7 +144,7 @@ static int configure_unit(PssstCapture *capture, char *error, size_t errorLength
     format.mBitsPerChannel = 32;
     AudioUnitSetProperty(capture->unit, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Output, 1, &format, sizeof(format));
     AURenderCallbackStruct callback = { render_callback, capture };
-    status = AudioUnitSetProperty(capture->unit, kAudioUnitProperty_SetRenderCallback, kAudioUnitScope_Input, 0, &callback, sizeof(callback));
+    status = AudioUnitSetProperty(capture->unit, kAudioOutputUnitProperty_SetInputCallback, kAudioUnitScope_Global, 0, &callback, sizeof(callback));
     if (status != noErr) { set_status_error(error, errorLength, "Could not install audio callback", status); return -1; }
     status = AudioUnitInitialize(capture->unit);
     if (status != noErr) { set_status_error(error, errorLength, "Could not initialize audio unit", status); return -1; }
