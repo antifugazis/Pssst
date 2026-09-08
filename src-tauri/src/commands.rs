@@ -70,14 +70,29 @@ pub fn capture_permission_status() -> Result<CapturePermission, String> {
 #[tauri::command]
 pub fn open_screen_recording_settings() -> Result<(), String> {
     #[cfg(target_os = "macos")]
-    { unsafe { CGRequestScreenCaptureAccess(); }
-      std::process::Command::new("open")
+    { std::process::Command::new("open")
         .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
         .spawn()
         .map(|_| ())
         .map_err(|error| error.to_string()) }
     #[cfg(not(target_os = "macos"))]
     { Err("Screen Recording permissions are managed by your operating system.".into()) }
+}
+
+/// Only the explicit first-run action may show the macOS permission prompt.
+/// Opening System Settings must never generate the prompt again.
+#[tauri::command]
+pub fn request_screen_recording_access() -> Result<CapturePermission, String> {
+    #[cfg(target_os = "macos")]
+    {
+        if unsafe { CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess() } {
+            Ok(CapturePermission::Granted)
+        } else {
+            Ok(CapturePermission::Required)
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    { Ok(CapturePermission::Granted) }
 }
 
 #[tauri::command]

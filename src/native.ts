@@ -13,6 +13,7 @@ export const native = {
   applicationIcon: (bundleId: string) => invoke<string | null>('capture_application_icon', { bundleId }),
   capturePermissionStatus: () => invoke<CapturePermission>('capture_permission_status'),
   openScreenRecordingSettings: () => invoke<void>('open_screen_recording_settings'),
+  requestScreenRecordingAccess: () => invoke<CapturePermission>('request_screen_recording_access'),
   validateServerLink: (link: string) => invoke<ServerCapabilities>('validate_server_link', { link }),
   start: (course: string, application: NativeApplication, include_microphone: boolean) => invoke<RecordingSnapshot>('start_recording', { request: { course, application, include_microphone } }),
   stop: (sessionId: string) => invoke<RecordingSnapshot>('stop_recording', { sessionId }),

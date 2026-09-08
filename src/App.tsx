@@ -365,7 +365,7 @@ function Onboarding({ finish }: { finish: () => void }) {
                 <small>
                   Nécessaire pour entendre l’application où votre cours se joue.
                 </small>
-                <button onClick={() => native.openScreenRecordingSettings()}>
+                <button onClick={() => native.requestScreenRecordingAccess()}>
                   Autoriser
                 </button>
               </div>

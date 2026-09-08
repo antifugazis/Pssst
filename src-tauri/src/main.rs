@@ -13,6 +13,7 @@ fn main() {
             pssst::commands::capture_application_icon,
             pssst::commands::capture_permission_status,
             pssst::commands::open_screen_recording_settings,
+            pssst::commands::request_screen_recording_access,
             pssst::commands::validate_server_link,
             pssst::commands::start_recording,
             pssst::commands::stop_recording,
