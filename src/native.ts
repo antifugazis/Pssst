@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 
 export type NativeApplication = { id: string; name: string; icon_hint: string; icon_data?: string | null; available: boolean };
+export type CapturePermission = 'granted' | 'required' | 'denied';
 export type Track = { kind: 'application' | 'microphone'; relative_path: string; bytes_written: number; processing_state: string };
 export type TranscriptSegment = { backend_id: string; start_ms: number; end_ms: number; raw_text: string; corrected_text: string | null; final_text: string | null };
 export type LocalSession = { id: string; course: string; started_at: string; ended_at: string | null; recording_state: string; selected_application: NativeApplication; microphone_included: boolean; tracks: Track[]; transcription_state: string; correction_state: string; last_error: string | null; transcript_segments: TranscriptSegment[] };
@@ -9,6 +10,7 @@ export type ServerCapabilities = { capabilities: { faster_whisper: boolean; whis
 export const isTauri = () => '__TAURI_INTERNALS__' in window;
 export const native = {
   applications: () => invoke<NativeApplication[]>('list_capture_applications'),
+  capturePermissionStatus: () => invoke<CapturePermission>('capture_permission_status'),
   openScreenRecordingSettings: () => invoke<void>('open_screen_recording_settings'),
   validateServerLink: (link: string) => invoke<ServerCapabilities>('validate_server_link', { link }),
   start: (course: string, application: NativeApplication, include_microphone: boolean) => invoke<RecordingSnapshot>('start_recording', { request: { course, application, include_microphone } }),

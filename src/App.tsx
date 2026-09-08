@@ -422,26 +422,38 @@ function Setup({
   const [mic, setMic] = useState(true);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState("");
+  const [permissionRequired, setPermissionRequired] = useState(false);
+  const loadApplications = async () => {
+    if (!isTauri()) return;
+    try {
+      const status = await native.capturePermissionStatus();
+      const needsPermission = status !== "granted";
+      setPermissionRequired(needsPermission);
+      if (needsPermission) return;
+      const applications = await native.applications();
+      setSources(
+        applications.map((application) => ({
+          id: application.id,
+          name: application.name,
+          detail: "Application ouverte",
+          available: application.available,
+          iconData: application.icon_data,
+          native: application,
+        })),
+      );
+      setError("");
+    } catch (reason) {
+      setError(String(reason));
+    }
+  };
   useEffect(() => {
     if (!isTauri()) return;
-    native
-      .applications()
-      .then((applications) =>
-        setSources(
-          applications.map((application) => ({
-            id: application.id,
-            name: application.name,
-            detail: "Application ouverte",
-            available: application.available,
-            iconData: application.icon_data,
-            native: application,
-          })),
-        ),
-      )
-      .catch((error) => setError(String(error)));
+    void loadApplications();
+    window.addEventListener("focus", loadApplications);
+    return () => window.removeEventListener("focus", loadApplications);
   }, []);
   const ready = canStartRecording({ source, course });
-  const permissionDenied = error.includes("Screen Recording permission");
+  const permissionDenied = permissionRequired;
   return (
     <main className="setup">
       <section className="setup-intro">
@@ -467,7 +479,10 @@ function Setup({
             </p>
             <button
               className="record-button"
-              onClick={() => native.openScreenRecordingSettings()}
+              onClick={async () => {
+                await native.openScreenRecordingSettings();
+                window.setTimeout(() => void loadApplications(), 900);
+              }}
             >
               Ouvrir les réglages macOS
             </button>

@@ -188,6 +188,36 @@ h1 em {
   flex-direction: column;
   gap: 26px;
 }
+.permission-card {
+  background: rgba(255, 253, 249, 0.82);
+  border: 1px solid #e2dcd1;
+  border-radius: 18px;
+  box-shadow: 0 18px 45px rgba(53, 58, 49, 0.07);
+  padding: 28px;
+}
+.permission-card h3 {
+  color: #263129;
+  font: 500 29px/1.1 "Fraunces", serif;
+  letter-spacing: -0.04em;
+  margin: 0;
+}
+.permission-card p:not(.eyebrow) {
+  color: #707a70;
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 18px 0 22px;
+  max-width: 460px;
+}
+.permission-card .record-button {
+  margin-top: 2px;
+}
+.permission-card small {
+  color: #929990;
+  display: block;
+  font-size: 11px;
+  line-height: 1.45;
+  margin-top: 12px;
+}
 .field {
   position: relative;
 }

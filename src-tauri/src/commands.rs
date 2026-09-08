@@ -9,6 +9,7 @@ use crate::{capture::{CaptureApplication, CaptureBackend, CapturePermission}, re
 #[link(name = "CoreGraphics", kind = "framework")]
 extern "C" {
     fn CGRequestScreenCaptureAccess() -> bool;
+    fn CGPreflightScreenCaptureAccess() -> bool;
 }
 
 #[cfg(target_os = "macos")]
@@ -39,6 +40,10 @@ pub fn list_capture_applications() -> Result<Vec<CaptureApplication>, String> {
 
 #[tauri::command]
 pub fn capture_permission_status() -> Result<CapturePermission, String> {
+    #[cfg(target_os = "macos")]
+    if unsafe { CGPreflightScreenCaptureAccess() } {
+        return Ok(CapturePermission::Granted);
+    }
     #[cfg(target_os = "macos")]
     let backend = crate::capture::macos::MacCaptureBackend::new();
     #[cfg(not(target_os = "macos"))]
