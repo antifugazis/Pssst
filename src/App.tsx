@@ -1007,16 +1007,30 @@ function Detail({
             )}
           </div>
         )}
-        {transcript.map((line, index) => (
-          <p key={`${line.time}-${index}`}>
-            <time>{formatTime(Math.floor(line.time / 1000))}</time>
-            {line.text}
-          </p>
-        ))}
-        {!transcript.length && (
-          <p className="pending-copy">
-            La file locale prépare la transcription de cette session.
-          </p>
+        {version === "corrected" ? (
+          transcript.length ? (
+            <p className="corrected-block">
+              {transcript.map((line) => line.text).join(" ")}
+            </p>
+          ) : (
+            <p className="pending-copy">
+              La file locale prépare la transcription de cette session.
+            </p>
+          )
+        ) : (
+          <>
+            {transcript.map((line, index) => (
+              <p key={`${line.time}-${index}`}>
+                <time>{formatTime(Math.floor(line.time / 1000))}</time>
+                {line.text}
+              </p>
+            ))}
+            {!transcript.length && (
+              <p className="pending-copy">
+                La file locale prépare la transcription de cette session.
+              </p>
+            )}
+          </>
         )}
       </div>
     </main>

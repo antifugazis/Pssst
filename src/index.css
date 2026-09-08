@@ -1629,6 +1629,12 @@ h1 em {
   color: #788278;
   font-size: 11px;
 }
+.corrected-block {
+  line-height: 1.8;
+  font-size: 15px;
+  color: #2c2c2c;
+  white-space: pre-wrap;
+}
 .detail-transcript {
   max-width: 700px;
 }
