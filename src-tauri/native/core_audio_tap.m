@@ -106,6 +106,19 @@ static int configure_unit(PssstCapture *capture, char *error, size_t errorLength
     AudioUnitSetProperty(capture->unit, kAudioOutputUnitProperty_EnableIO, kAudioUnitScope_Output, 0, &disabled, sizeof(disabled));
     status = AudioUnitSetProperty(capture->unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0, &capture->aggregate, sizeof(capture->aggregate));
     if (status != noErr) { set_status_error(error, errorLength, "Could not attach the audio tap device", status); return -1; }
+    // Force a browser-friendly, interleaved stereo stream. Without this,
+    // HAL may expose two non-interleaved channel buffers while the WAV header
+    // describes stereo interleaved PCM, producing an undecodable file.
+    AudioStreamBasicDescription format = {0};
+    format.mSampleRate = 48000;
+    format.mFormatID = kAudioFormatLinearPCM;
+    format.mFormatFlags = kAudioFormatFlagsNativeFloatPacked;
+    format.mBytesPerPacket = 8;
+    format.mFramesPerPacket = 1;
+    format.mBytesPerFrame = 8;
+    format.mChannelsPerFrame = 2;
+    format.mBitsPerChannel = 32;
+    AudioUnitSetProperty(capture->unit, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Output, 1, &format, sizeof(format));
     AURenderCallbackStruct callback = { render_callback, capture };
     status = AudioUnitSetProperty(capture->unit, kAudioUnitProperty_SetRenderCallback, kAudioUnitScope_Input, 0, &callback, sizeof(callback));
     if (status != noErr) { set_status_error(error, errorLength, "Could not install audio callback", status); return -1; }

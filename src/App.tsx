@@ -117,7 +117,7 @@ function Header({
       </nav>
       <div className="ready-status">
         <span /> {view === "recording" ? "En cours" : "Prêt"}
-        <small>v0.12.24</small>
+        <small>v0.12.25</small>
       </div>
     </header>
   );
@@ -821,6 +821,7 @@ function Detail({ snapshot }: { snapshot: RecordingSnapshot }) {
       .catch((error) => {
         setAudioUrl("");
         setAudioError(String(error));
+        console.error("Pssst audio track error", error);
       });
   }, [session.id]);
   const transcript = useMemo(
@@ -875,9 +876,15 @@ function Detail({ snapshot }: { snapshot: RecordingSnapshot }) {
               src={audioUrl}
               controls
               onEnded={() => setPlaying(false)}
-              onError={() => setAudioError("Impossible de lire cette piste locale.")}
+              onError={(event) => {
+                const detail = event.currentTarget.error?.message || "format audio invalide";
+                const message = `Impossible de lire cette piste locale : ${detail}`;
+                setAudioError(message);
+                console.error("Pssst audio playback error", event.currentTarget.error);
+              }}
             />
           )}
+          {audioError && <span className="audio-error" role="status">{audioError}</span>}
         </div>
       </div>
       <div className="version-tabs">
@@ -973,7 +980,7 @@ function Settings() {
           <br />
           <em>manière.</em>
         </h1>
-        <small className="app-version">Pssst v0.12.24</small>
+        <small className="app-version">Pssst v0.12.25</small>
       </div>
       <section className="settings-form">
         <section className="settings-section account-section">
