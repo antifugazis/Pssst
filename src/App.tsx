@@ -111,15 +111,13 @@ function Header({
         <Logo />
         <span className="sr-only">Pssst</span>
       </button>
-      {view !== "setup" && (
-        <nav>
-          <button onClick={() => setView("library")}>Cours</button>
-          <button onClick={() => setView("settings")}>Réglages</button>
-        </nav>
-      )}
+      <nav aria-label="Navigation principale">
+        <button onClick={() => setView("library")}>Cours</button>
+        <button onClick={() => setView("settings")}>Réglages</button>
+      </nav>
       <div className="ready-status">
         <span /> {view === "recording" ? "En cours" : "Prêt"}
-        <small>v0.12.23</small>
+        <small>v0.12.24</small>
       </div>
     </header>
   );
@@ -975,7 +973,7 @@ function Settings() {
           <br />
           <em>manière.</em>
         </h1>
-        <small className="app-version">Pssst v0.12.23</small>
+        <small className="app-version">Pssst v0.12.24</small>
       </div>
       <section className="settings-form">
         <section className="settings-section account-section">
