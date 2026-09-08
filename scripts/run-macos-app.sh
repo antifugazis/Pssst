@@ -6,7 +6,7 @@ set -euo pipefail
 # manually testing real macOS capture.
 task_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 bundle_path="$task_root/src-tauri/target/debug/bundle/macos/Pssst.app"
-applications_dir="${HOME}/Applications"
+applications_dir="/Applications"
 app_path="$applications_dir/Pssst.app"
 
 cd "$task_root"

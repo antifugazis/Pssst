@@ -57,14 +57,22 @@ pub fn capture_application_icon(bundle_id: String) -> Option<String> {
 #[tauri::command]
 pub fn capture_permission_status() -> Result<CapturePermission, String> {
     #[cfg(target_os = "macos")]
-    if unsafe { CGPreflightScreenCaptureAccess() } {
-        return Ok(CapturePermission::Granted);
+    {
+        // ScreenCaptureKit may expose shareable content before it permits a
+        // stream. CGPreflightScreenCaptureAccess is the authoritative TCC
+        // check for the actual application/window/display capture operation.
+        return Ok(if unsafe { CGPreflightScreenCaptureAccess() } {
+            CapturePermission::Granted
+        } else {
+            CapturePermission::Required
+        });
     }
-    #[cfg(target_os = "macos")]
-    let backend = crate::capture::macos::MacCaptureBackend::new();
     #[cfg(not(target_os = "macos"))]
     let backend = crate::capture::simulated::SimulatedCaptureBackend::default();
-    backend.permission_status().map_err(|error| error.to_string())
+    #[cfg(not(target_os = "macos"))]
+    {
+        backend.permission_status().map_err(|error| error.to_string())
+    }
 }
 
 #[tauri::command]
