@@ -19,6 +19,14 @@ info() { printf '  %s•%s %s%s%s\n' "$CYAN" "$RESET" "$DIM" "$1" "$RESET"; }
 success() { printf '  %s✓%s %s\n' "$GREEN" "$RESET" "$1"; }
 warn() { printf '  %s! %s%s\n' "$YELLOW" "$1" "$RESET" >&2; }
 pretty() { printf '%s' "$1" | awk '{print toupper(substr($0,1,1)) substr($0,2)}'; }
+install_screen() {
+  if [[ -t /dev/tty && "${PSSST_NO_CLEAR:-0}" != "1" ]]; then
+    printf '\033[2J\033[H' > /dev/tty
+  fi
+  section "pssst"
+  printf '%sInstalling Pssst Whisper%s\n' "$DIM" "$RESET"
+  printf '  %s · %s · %s\n' "$(pretty "$model")" "$(pretty "$quality")" "French"
+}
 port_available() {
   if command -v ss >/dev/null 2>&1; then
     ! ss -ltnH 2>/dev/null | awk '{print $4}' | grep -Eq "(:|\\])$1$"
@@ -123,8 +131,8 @@ if ! [[ "$PORT" =~ ^[0-9]+$ ]] || (( PORT < 1 || PORT > 65535 )); then
   exit 1
 fi
 
-section "Installing pssst"
- : > "$LOG_FILE"
+install_screen
+: > "$LOG_FILE"
 export DEBIAN_FRONTEND=noninteractive
 run_step "Installing system dependencies" apt-get update -qq
 run_step "Installing system packages" apt-get install -y -qq python3 python3-venv python3-pip ffmpeg curl ca-certificates
