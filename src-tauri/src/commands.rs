@@ -9,7 +9,6 @@ use crate::{capture::{CaptureApplication, CaptureBackend, CaptureError, CaptureP
 #[link(name = "CoreGraphics", kind = "framework")]
 extern "C" {
     fn CGRequestScreenCaptureAccess() -> bool;
-    fn CGPreflightScreenCaptureAccess() -> bool;
 }
 
 #[cfg(target_os = "macos")]
@@ -31,10 +30,6 @@ impl RecordingController {
 
 #[tauri::command]
 pub fn list_capture_applications() -> Result<Vec<CaptureApplication>, String> {
-    #[cfg(target_os = "macos")]
-    if !unsafe { CGPreflightScreenCaptureAccess() } {
-        return Err(CaptureError::PermissionRequired.to_string());
-    }
     #[cfg(target_os = "macos")]
     let backend = crate::capture::macos::MacCaptureBackend::new();
     #[cfg(not(target_os = "macos"))]
@@ -58,14 +53,13 @@ pub fn capture_application_icon(bundle_id: String) -> Option<String> {
 pub fn capture_permission_status() -> Result<CapturePermission, String> {
     #[cfg(target_os = "macos")]
     {
-        // ScreenCaptureKit may expose shareable content before it permits a
-        // stream. CGPreflightScreenCaptureAccess is the authoritative TCC
-        // check for the actual application/window/display capture operation.
-        return Ok(if unsafe { CGPreflightScreenCaptureAccess() } {
-            CapturePermission::Granted
-        } else {
-            CapturePermission::Required
-        });
+        // macOS 15's combined “Screen & System Audio Recording” control is
+        // evaluated by ScreenCaptureKit. The older CoreGraphics preflight can
+        // remain false even while this app's System Settings switch is on,
+        // incorrectly hiding every source in Pssst.
+        return crate::capture::macos::MacCaptureBackend::new()
+            .permission_status()
+            .map_err(|error| error.to_string());
     }
     #[cfg(not(target_os = "macos"))]
     let backend = crate::capture::simulated::SimulatedCaptureBackend::default();
@@ -93,11 +87,15 @@ pub fn open_screen_recording_settings() -> Result<(), String> {
 pub fn request_screen_recording_access() -> Result<CapturePermission, String> {
     #[cfg(target_os = "macos")]
     {
-        if unsafe { CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess() } {
-            Ok(CapturePermission::Granted)
-        } else {
-            Ok(CapturePermission::Required)
+        let backend = crate::capture::macos::MacCaptureBackend::new();
+        if let Ok(CapturePermission::Granted) = backend.permission_status() {
+            return Ok(CapturePermission::Granted);
         }
+        // This may display macOS's first-run prompt. Check via
+        // ScreenCaptureKit afterwards because it is the capture API Pssst
+        // actually uses.
+        unsafe { CGRequestScreenCaptureAccess() };
+        backend.permission_status().map_err(|error| error.to_string())
     }
     #[cfg(not(target_os = "macos"))]
     { Ok(CapturePermission::Granted) }
