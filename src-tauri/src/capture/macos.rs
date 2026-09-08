@@ -40,7 +40,7 @@ impl CaptureBackend for MacCaptureBackend {
             let mut parts = line.trim().splitn(2, char::is_whitespace);
             let Some(pid) = parts.next().and_then(|value| value.parse::<i32>().ok()) else { continue };
             let Some(command) = parts.next().map(str::trim).filter(|value| !value.is_empty()) else { continue };
-            if pid <= 0 { continue; }
+            if pid <= 0 || !command.contains(".app/Contents/MacOS/") || command.matches(".app").count() != 1 { continue; }
             let path = Path::new(command);
             let name = path.file_stem().and_then(|value| value.to_str()).unwrap_or(command).to_string();
             if ["ps", "launchservicesd", "runningboardd", "WindowServer", "loginwindow", "kernel_task"].iter().any(|value| value.eq_ignore_ascii_case(&name)) { continue; }
