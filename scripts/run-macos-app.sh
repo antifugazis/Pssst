@@ -5,8 +5,12 @@ set -euo pipefail
 # not to Tauri's transient debug executable. Always use this command when
 # manually testing real macOS capture.
 task_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-app_path="$task_root/src-tauri/target/debug/bundle/macos/Pssst.app"
+bundle_path="$task_root/src-tauri/target/debug/bundle/macos/Pssst.app"
+applications_dir="${HOME}/Applications"
+app_path="$applications_dir/Pssst.app"
 
 cd "$task_root"
 npm exec tauri build -- --debug --bundles app
+mkdir -p "$applications_dir"
+ditto "$bundle_path" "$app_path"
 open -n "$app_path"
