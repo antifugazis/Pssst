@@ -59,10 +59,10 @@ prompt() {
   local answer
   if [[ -t 0 ]]; then
     read -r answer
-  elif [[ -t 1 && -r /dev/tty ]]; then
-    read -r answer </dev/tty
+  elif [[ -r /dev/tty ]] && { read -r answer </dev/tty; } 2>/dev/null; then
+    :
   else
-    read -r answer
+    read -r answer || answer=""
   fi
   printf '%s\n' "$answer"
 }
