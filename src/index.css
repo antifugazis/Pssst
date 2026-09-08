@@ -1535,8 +1535,37 @@ h1 em {
   font-size: 11px;
   margin-right: 16px;
 }
+.lecture-end-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.continue-chip {
+  background: #e9f0e6;
+  color: #27342b;
+  border-radius: 6px;
+  font: 500 11px "DM Sans", sans-serif;
+  padding: 4px 9px;
+  border: 1px solid #d2ded0;
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+.continue-chip:hover {
+  background: #27342b;
+  color: #fff;
+  border-color: #27342b;
+}
+.detail-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
 .detail-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
   margin-bottom: 45px;
+  gap: 20px;
 }
 .detail-head > div > p:last-child {
   color: #899088;

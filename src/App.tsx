@@ -412,18 +412,33 @@ function Onboarding({ finish }: { finish: () => void }) {
 
 function Setup({
   start,
+  initialCourse = "",
+  initialAppId = null,
+  initialMic = true,
+  courseSuggestions = [],
 }: {
   start: (source: UiSource, course: string, mic: boolean) => Promise<void>;
+  initialCourse?: string;
+  initialAppId?: string | null;
+  initialMic?: boolean;
+  courseSuggestions?: string[];
 }) {
   const [sources, setSources] = useState<UiSource[]>(fallback);
   const [source, setSource] = useState<UiSource | null>(null);
   const [open, setOpen] = useState(false);
-  const [course, setCourse] = useState("");
-  const [mic, setMic] = useState(true);
+  const [course, setCourse] = useState(
+    () => initialCourse || preference.get("pssst.last-course") || "",
+  );
+  const [mic, setMic] = useState(initialMic);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState("");
   const [permissionRequired, setPermissionRequired] = useState(false);
   const requestedIcons = useRef(new Set<string>());
+
+  useEffect(() => {
+    if (initialCourse) setCourse(initialCourse);
+  }, [initialCourse]);
+
   const loadApplications = async () => {
     if (!isTauri()) return;
     try {
@@ -441,18 +456,24 @@ function Setup({
         return;
       }
       const applications = await native.applications();
-      setSources((current) =>
-        applications.map((application) => ({
-          id: application.id,
-          name: application.name,
-          detail: "Application ouverte",
-          available: application.available,
-          iconData:
-            current.find((item) => item.id === application.id)?.iconData ??
-            application.icon_data,
-          native: application,
-        })),
-      );
+      const mapped = applications.map((application) => ({
+        id: application.id,
+        name: application.name,
+        detail: "Application ouverte",
+        available: application.available,
+        iconData:
+          sources.find((item) => item.id === application.id)?.iconData ??
+          application.icon_data,
+        native: application,
+      }));
+      setSources(mapped);
+
+      // Auto-select initial app or last used app
+      const targetId = initialAppId || preference.get("pssst.last-app-id");
+      if (targetId) {
+        const found = mapped.find((item) => item.id === targetId && item.available);
+        if (found) setSource(found);
+      }
       // The picker is useful before every icon is ready. Resolve macOS app
       // icons afterwards so an indexing delay can never hide the sources.
       void (async () => {
@@ -536,7 +557,7 @@ function Setup({
           </section>
         ) : (
           <>
-            <CourseInput value={course} onChange={setCourse} />
+            <CourseInput suggestions={courseSuggestions} value={course} onChange={setCourse} />
             <SourcePicker
               sources={sources}
               selected={source}
@@ -744,10 +765,12 @@ function Library({
   sessions,
   open,
   setup,
+  continueCourse,
 }: {
   sessions: RecordingSnapshot[];
   open: (snapshot: RecordingSnapshot) => void;
   setup: () => void;
+  continueCourse: (course: string, appId?: string | null, mic?: boolean) => void;
 }) {
   return (
     <main className="library-page">
@@ -785,14 +808,30 @@ function Library({
                     : "Local"}
                 </small>
               </span>
-              <i className="lecture-status">
-                {snapshot.session.recording_state === "recoverable"
-                  ? "À récupérer"
-                  : snapshot.session.recording_state === "recording"
-                    ? "En cours"
-                    : "Prêt"}
-              </i>
-              <b>›</b>
+              <span className="lecture-end-actions">
+                <span
+                  className="continue-chip"
+                  title="Continuer ce cours"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    continueCourse(
+                      snapshot.session.course,
+                      snapshot.session.selected_application.id,
+                      snapshot.session.microphone_included,
+                    );
+                  }}
+                >
+                  Continuer
+                </span>
+                <i className="lecture-status">
+                  {snapshot.session.recording_state === "recoverable"
+                    ? "À récupérer"
+                    : snapshot.session.recording_state === "recording"
+                      ? "En cours"
+                      : "Prêt"}
+                </i>
+                <b>›</b>
+              </span>
             </button>
           ))
         ) : (
@@ -805,7 +844,13 @@ function Library({
   );
 }
 
-function Detail({ snapshot }: { snapshot: RecordingSnapshot }) {
+function Detail({
+  snapshot,
+  continueCourse,
+}: {
+  snapshot: RecordingSnapshot;
+  continueCourse: (course: string, appId?: string | null, mic?: boolean) => void;
+}) {
   const [version, setVersion] = useState("final");
   const [audioUrl, setAudioUrl] = useState("");
   const [audioError, setAudioError] = useState("");
@@ -895,43 +940,57 @@ function Detail({ snapshot }: { snapshot: RecordingSnapshot }) {
             {formatTime(snapshot.elapsed_seconds)}
           </p>
         </div>
-        <div className="audio-player">
+        <div className="detail-head-actions">
           <button
-            disabled={!audioUrl}
-            onClick={() => {
-              const audio =
-                document.querySelector<HTMLAudioElement>("#lecture-audio");
-              if (!audio) return;
-              if (audio.paused) {
-                audio.play();
-                setPlaying(true);
-              } else {
-                audio.pause();
-                setPlaying(false);
-              }
-            }}
+            className="new-recording"
+            onClick={() =>
+              continueCourse(
+                session.course,
+                session.selected_application.id,
+                session.microphone_included,
+              )
+            }
           >
-            {playing ? "Ⅱ" : "▶"}
+            + Continuer ce cours
           </button>
-          <span />
-          <small>
-            {audioUrl ? "Piste locale · prête à écouter" : audioError ? "Piste locale indisponible" : "Préparation de la piste locale…"}
-          </small>
-          {audioUrl && (
-            <audio
-              id="lecture-audio"
-              src={audioUrl}
-              controls
-              onEnded={() => setPlaying(false)}
-              onError={(event) => {
-                const detail = event.currentTarget.error?.message || "format audio invalide";
-                const message = `Impossible de lire cette piste locale : ${detail}`;
-                setAudioError(message);
-                console.error("Pssst audio playback error", event.currentTarget.error);
+          <div className="audio-player">
+            <button
+              disabled={!audioUrl}
+              onClick={() => {
+                const audio =
+                  document.querySelector<HTMLAudioElement>("#lecture-audio");
+                if (!audio) return;
+                if (audio.paused) {
+                  audio.play();
+                  setPlaying(true);
+                } else {
+                  audio.pause();
+                  setPlaying(false);
+                }
               }}
-            />
-          )}
-          {audioError && <span className="audio-error" role="status">{audioError}</span>}
+            >
+              {playing ? "Ⅱ" : "▶"}
+            </button>
+            <span />
+            <small>
+              {audioUrl ? "Piste locale · prête à écouter" : audioError ? "Piste locale indisponible" : "Préparation de la piste locale…"}
+            </small>
+            {audioUrl && (
+              <audio
+                id="lecture-audio"
+                src={audioUrl}
+                controls
+                onEnded={() => setPlaying(false)}
+                onError={(event) => {
+                  const detail = event.currentTarget.error?.message || "format audio invalide";
+                  const message = `Impossible de lire cette piste locale : ${detail}`;
+                  setAudioError(message);
+                  console.error("Pssst audio playback error", event.currentTarget.error);
+                }}
+              />
+            )}
+            {audioError && <span className="audio-error" role="status">{audioError}</span>}
+          </div>
         </div>
       </div>
       <div className="version-tabs">
@@ -1170,6 +1229,15 @@ export default function App() {
   const [view, setView] = useState<View>("setup");
   const [snapshot, setSnapshot] = useState<RecordingSnapshot | null>(null);
   const [sessions, setSessions] = useState<RecordingSnapshot[]>([]);
+  const [prefill, setPrefill] = useState<{
+    course: string;
+    appId?: string | null;
+    mic?: boolean;
+  }>({
+    course: preference.get("pssst.last-course") || "",
+    appId: preference.get("pssst.last-app-id") || null,
+    mic: true,
+  });
   const [onboarding, setOnboarding] = useState(
     () =>
       preference.get("pssst.onboarding-complete") !== "true" &&
@@ -1187,7 +1255,15 @@ export default function App() {
       native.validateServerLink(savedLink.trim()).catch(() => undefined);
     }
   }, []);
+
+  const continueCourse = (course: string, appId?: string | null, mic?: boolean) => {
+    setPrefill({ course, appId, mic: mic ?? true });
+    setView("setup");
+  };
+
   const start = async (source: UiSource, course: string, mic: boolean) => {
+    preference.set("pssst.last-course", course.trim());
+    preference.set("pssst.last-app-id", source.id);
     if (!isTauri()) {
       const now = new Date().toISOString();
       setSnapshot({
@@ -1245,7 +1321,17 @@ export default function App() {
     <div className="app-shell product-shell">
       <Header view={view} setView={setView} />
       <div key={view} className="view-transition">
-        {view === "setup" && <Setup start={start} />}
+        {view === "setup" && (
+          <Setup
+            start={start}
+            initialCourse={prefill.course}
+            initialAppId={prefill.appId}
+            initialMic={prefill.mic ?? true}
+            courseSuggestions={Array.from(
+              new Set(sessions.map((s) => s.session.course).filter(Boolean)),
+            )}
+          />
+        )}
         {view === "recording" && snapshot && (
           <Recording snapshot={snapshot} stop={stop} />
         )}
@@ -1256,10 +1342,20 @@ export default function App() {
           <Library
             sessions={sessions}
             open={open}
-            setup={() => setView("setup")}
+            setup={() => {
+              setPrefill({
+                course: preference.get("pssst.last-course") || "",
+                appId: preference.get("pssst.last-app-id") || null,
+                mic: true,
+              });
+              setView("setup");
+            }}
+            continueCourse={continueCourse}
           />
         )}
-        {view === "detail" && snapshot && <Detail snapshot={snapshot} />}
+        {view === "detail" && snapshot && (
+          <Detail snapshot={snapshot} continueCourse={continueCourse} />
+        )}
         {view === "settings" && <Settings />}
       </div>
     </div>
