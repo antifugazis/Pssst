@@ -125,12 +125,18 @@ function Header({
 
 function Onboarding({ finish }: { finish: () => void }) {
   const [step, setStep] = useState(0);
-  const [mode, setMode] = useState("automatic");
+  const [mode, setMode] = useState(
+    () => preference.get("pssst.transcription-mode") ?? "automatic",
+  );
   const [installed, setInstalled] = useState(false);
   const [permission, setPermission] = useState(false);
-  const [serverLink, setServerLink] = useState("");
-  const [serverReady, setServerReady] = useState(false);
-  const [serverError, setServerError] = useState("");
+  const [serverLink, setServerLink] = useState(
+    () => preference.get("pssst.connection-link") ?? "",
+  );
+  const [serverReady, setServerReady] = useState(() => Boolean(preference.get("pssst.connection-link")));
+  const [serverError, setServerError] = useState(() =>
+    preference.get("pssst.connection-link") ? "Serveur enregistré" : "",
+  );
   const connectServer = async () => {
     const link = serverLink.trim();
     try {
