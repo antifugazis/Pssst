@@ -32,24 +32,26 @@ impl RecordingController {
 #[tauri::command]
 pub fn list_capture_applications() -> Result<Vec<CaptureApplication>, String> {
     #[cfg(target_os = "macos")]
+    if !unsafe { CGPreflightScreenCaptureAccess() } {
+        return Err(CaptureError::PermissionRequired.to_string());
+    }
+    #[cfg(target_os = "macos")]
     let backend = crate::capture::macos::MacCaptureBackend::new();
     #[cfg(not(target_os = "macos"))]
     let backend = crate::capture::simulated::SimulatedCaptureBackend::default();
     match backend.list_applications() {
         Ok(applications) => Ok(applications),
-        Err(CaptureError::PermissionRequired) => {
-            #[cfg(target_os = "macos")]
-            if unsafe { CGPreflightScreenCaptureAccess() } {
-                // TCC says access is already granted; ScreenCaptureKit can
-                // still briefly return no shareable content while macOS
-                // refreshes its running-app snapshot. Let the UI retry
-                // instead of incorrectly showing the permission wall.
-                return Ok(Vec::new());
-            }
-            Err(CaptureError::PermissionRequired.to_string())
-        }
+        Err(CaptureError::PermissionRequired) => Err(CaptureError::PermissionRequired.to_string()),
         Err(error) => Err(error.to_string()),
     }
+}
+
+#[tauri::command]
+pub fn capture_application_icon(bundle_id: String) -> Option<String> {
+    #[cfg(target_os = "macos")]
+    { crate::capture::macos::application_icon_data(&bundle_id) }
+    #[cfg(not(target_os = "macos"))]
+    { let _ = bundle_id; None }
 }
 
 #[tauri::command]

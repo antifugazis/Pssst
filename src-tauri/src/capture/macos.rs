@@ -40,7 +40,7 @@ pub struct MacCaptureBackend { next_handle: u64, active: HashMap<u64, ActiveCapt
 /// Resolve the real application icon from the running app bundle. The webview
 /// receives a data URL, so it can render the same icon macOS shows in Finder
 /// without depending on an icon CDN or a hard-coded app list.
-fn application_icon_data(bundle_id: &str) -> Option<String> {
+pub fn application_icon_data(bundle_id: &str) -> Option<String> {
     let query = format!("kMDItemCFBundleIdentifier == '{}'", bundle_id.replace('\'', "\\'"));
     let output = Command::new("/usr/bin/mdfind").arg(query).output().ok()?;
     let bundle = String::from_utf8_lossy(&output.stdout).lines().next()?.trim().to_string();
@@ -58,15 +58,18 @@ fn application_icon_data(bundle_id: &str) -> Option<String> {
 impl MacCaptureBackend { pub fn new() -> Self { Self { next_handle: 1, active: HashMap::new() } } }
 impl CaptureBackend for MacCaptureBackend {
     fn list_applications(&self) -> Result<Vec<CaptureApplication>, CaptureError> {
-        let content = SCShareableContent::get().map_err(|_| CaptureError::PermissionRequired)?;
-        let snapshot = content.snapshot().ok_or(CaptureError::PermissionRequired)?;
-        Ok(snapshot.applications.iter().filter(|application| application.process_id > 0).map(|application| CaptureApplication { id: format!("sc-{}", application.process_id), name: application.application_name.clone(), icon_hint: application.bundle_identifier.clone(), icon_data: application_icon_data(&application.bundle_identifier), available: true }).collect())
+        let content = SCShareableContent::get().map_err(|error| CaptureError::Backend(format!("ScreenCaptureKit could not read running applications: {error}")))?;
+        let snapshot = content.snapshot().ok_or_else(|| CaptureError::Backend("ScreenCaptureKit returned no application snapshot".into()))?;
+        // Keep this response deliberately light. Icon extraction can involve
+        // Spotlight and image conversion, so the UI requests it lazily after
+        // the application list is already visible.
+        Ok(snapshot.applications.iter().filter(|application| application.process_id > 0).map(|application| CaptureApplication { id: format!("sc-{}", application.process_id), name: application.application_name.clone(), icon_hint: application.bundle_identifier.clone(), icon_data: None, available: true }).collect())
     }
     fn permission_status(&self) -> Result<CapturePermission, CaptureError> { SCShareableContent::get().map(|_| CapturePermission::Granted).map_err(|_| CaptureError::PermissionRequired) }
     fn request_permission(&self) -> Result<CapturePermission, CaptureError> { self.permission_status() }
     fn start_capture(&mut self, request: CaptureRequest, output_path: &Path) -> Result<CaptureHandle, CaptureError> {
         let pid = request.application.id.strip_prefix("sc-").and_then(|id| id.parse::<i32>().ok()).ok_or(CaptureError::ApplicationUnavailable)?;
-        let content = SCShareableContent::get().map_err(|_| CaptureError::PermissionRequired)?;
+        let content = SCShareableContent::get().map_err(|error| CaptureError::Backend(format!("ScreenCaptureKit could not start capture: {error}")))?;
         let display = content.displays().first().cloned().ok_or_else(|| CaptureError::Backend("No active display is available".into()))?;
         let application = content.applications().iter().find(|application| application.process_id() == pid).cloned().ok_or(CaptureError::ApplicationUnavailable)?;
         let filter = SCContentFilter::create().with_display(&display).with_including_applications(&[&application], &[]).build();

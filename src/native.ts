@@ -10,6 +10,7 @@ export type ServerCapabilities = { capabilities: { faster_whisper: boolean; whis
 export const isTauri = () => '__TAURI_INTERNALS__' in window;
 export const native = {
   applications: () => invoke<NativeApplication[]>('list_capture_applications'),
+  applicationIcon: (bundleId: string) => invoke<string | null>('capture_application_icon', { bundleId }),
   capturePermissionStatus: () => invoke<CapturePermission>('capture_permission_status'),
   openScreenRecordingSettings: () => invoke<void>('open_screen_recording_settings'),
   validateServerLink: (link: string) => invoke<ServerCapabilities>('validate_server_link', { link }),

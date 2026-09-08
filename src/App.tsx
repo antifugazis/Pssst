@@ -441,6 +441,23 @@ function Setup({
           native: application,
         })),
       );
+      // The picker is useful before every icon is ready. Resolve macOS app
+      // icons afterwards so an indexing delay can never hide the sources.
+      void (async () => {
+        for (const application of applications) {
+          try {
+            const iconData = await native.applicationIcon(application.icon_hint);
+            if (!iconData) continue;
+            setSources((current) =>
+              current.map((item) =>
+                item.id === application.id ? { ...item, iconData } : item,
+              ),
+            );
+          } catch {
+            // A missing Finder/Spotlight icon is cosmetic; keep the source.
+          }
+        }
+      })();
       setError("");
     } catch (reason) {
       setError(String(reason));

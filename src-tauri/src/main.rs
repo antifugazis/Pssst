@@ -10,6 +10,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             pssst::commands::list_capture_applications,
+            pssst::commands::capture_application_icon,
             pssst::commands::capture_permission_status,
             pssst::commands::open_screen_recording_settings,
             pssst::commands::validate_server_link,
