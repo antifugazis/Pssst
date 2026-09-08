@@ -15,17 +15,18 @@ else
 fi
 
 section() { printf '\n%s%s%s\n' "$BOLD" "$1" "$RESET"; }
-info() { printf '  %s•%s %s%s%s\n' "$CYAN" "$RESET" "$DIM" "$1" "$RESET"; }
-success() { printf '  %s✓%s %s\n' "$GREEN" "$RESET" "$1"; }
-warn() { printf '  %s! %s%s\n' "$YELLOW" "$1" "$RESET" >&2; }
+rule() { printf '%s------------------------------------------------%s\n' "$DIM" "$RESET"; }
+info() { printf '  %s[>]%s %s%s%s\n' "$CYAN" "$RESET" "$DIM" "$1" "$RESET"; }
+success() { printf '  %s[ok]%s %s\n' "$GREEN" "$RESET" "$1"; }
+warn() { printf '  %s[!]%s %s\n' "$YELLOW" "$RESET" "$1" >&2; }
 pretty() { printf '%s' "$1" | awk '{print toupper(substr($0,1,1)) substr($0,2)}'; }
 install_screen() {
-  if [[ -t /dev/tty && "${PSSST_NO_CLEAR:-0}" != "1" ]]; then
-    printf '\033[2J\033[H' > /dev/tty
-  fi
+  printf '\n'
+  rule
   section "pssst"
   printf '%sInstalling Pssst Whisper%s\n' "$DIM" "$RESET"
-  printf '  %s · %s · %s\n' "$(pretty "$model")" "$(pretty "$quality")" "French"
+  printf '  Model: %s\n  Quality: %s\n  Language: French\n' "$(pretty "$model")" "$(pretty "$quality")"
+  rule
 }
 port_available() {
   if command -v ss >/dev/null 2>&1; then
@@ -51,7 +52,7 @@ fail() {
 }
 run_step() {
   local label="$1"; shift
-  info "${label}…"
+  info "${label}"
   if "$@" >>"$LOG_FILE" 2>&1; then success "$label"; else fail; fi
 }
 prompt() {
@@ -78,7 +79,7 @@ if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then 
 section "pssst"
 printf '%sSelf-hosted Whisper setup%s\n' "$DIM" "$RESET"
 section "Detected hardware"
-printf '  %-10s %s · %s cores\n' "CPU" "$cpu_name" "$cores"
+printf '  %-10s %s / %s cores\n' "CPU" "$cpu_name" "$cores"
 printf '  %-10s %s GB\n' "Memory" "$ram_gb"
 printf '  %-10s %s\n' "GPU" "$gpu"
 
@@ -86,7 +87,7 @@ recommended_model="medium"
 if [[ "$ram_gb" =~ ^[0-9]+$ ]] && (( ram_gb < 3 )); then recommended_model="small"; fi
 recommended_compute="$device $compute"
 section "Recommended"
-printf '  %s · %s · Balanced\n' "$(pretty "$recommended_model")" "$recommended_compute"
+printf '  %s / %s / Balanced\n' "$(pretty "$recommended_model")" "$recommended_compute"
 if [[ "$ram_gb" =~ ^[0-9]+$ ]] && (( ram_gb >= 3 && ram_gb < 6 )); then info "Medium is heavier on this machine; available swap is recommended."; fi
 
 model="${PSSST_MODEL:-}"
@@ -200,7 +201,7 @@ PSSST_WORKER_PY
 
 run_step "Validating worker" "$INSTALL_DIR/.venv/bin/python" -m py_compile "$INSTALL_DIR/worker.py"
 
-info "Downloading $(pretty "$model") model (the first download can take a while)…"
+info "Downloading $(pretty "$model") model (the first download can take a while)..."
 if ! PSSST_MODEL="$model" "$INSTALL_DIR/.venv/bin/python" -c 'import os; from faster_whisper import WhisperModel; WhisperModel(os.environ["PSSST_MODEL"], device="cpu", compute_type="int8")' >>"$LOG_FILE" 2>&1; then fail; fi
 success "$(pretty "$model") model ready"
 
@@ -228,7 +229,7 @@ EOF
 run_step "Reloading service manager" systemctl daemon-reload
 run_step "Enabling pssst service" systemctl enable pssst-whisper
 run_step "Starting pssst service" systemctl restart pssst-whisper
-info "Waiting for Whisper to become ready…"
+info "Waiting for Whisper to become ready..."
 healthy=0
 for _ in $(seq 1 60); do
   if curl -fsS "http://127.0.0.1:$PORT/healthz" >/dev/null 2>&1; then healthy=1; break; fi
@@ -248,5 +249,5 @@ pretty_model="$(pretty "$model")"
 section "pssst is ready"
 printf 'Model: %s\nQuality: %s\nLanguage: French\n\n' "$pretty_model" "$(pretty "$quality")"
 printf '%sConnection link%s\n  http://%s:%s/connect/%s\n\n' "$BOLD" "$RESET" "$host" "$PORT" "$secret"
-printf '%sKeep this link private — anyone with it can use this Whisper server.%s\n\n' "$DIM" "$RESET"
+printf '%sKeep this link private - anyone with it can use this Whisper server.%s\n\n' "$DIM" "$RESET"
 printf 'Service\n  sudo systemctl status pssst-whisper\n'
