@@ -810,13 +810,20 @@ function Library({
 function Detail({ snapshot }: { snapshot: RecordingSnapshot }) {
   const [version, setVersion] = useState("final");
   const [audioUrl, setAudioUrl] = useState("");
+  const [audioError, setAudioError] = useState("");
   const [playing, setPlaying] = useState(false);
   const session = snapshot.session;
   useEffect(() => {
     if (!isTauri()) return;
     invokeTrack(session.id)
-      .then((path) => setAudioUrl(convertFileSrc(path)))
-      .catch(() => setAudioUrl(""));
+      .then((path) => {
+        setAudioError("");
+        setAudioUrl(convertFileSrc(path));
+      })
+      .catch((error) => {
+        setAudioUrl("");
+        setAudioError(String(error));
+      });
   }, [session.id]);
   const transcript = useMemo(
     () =>
@@ -844,6 +851,7 @@ function Detail({ snapshot }: { snapshot: RecordingSnapshot }) {
         </div>
         <div className="audio-player">
           <button
+            disabled={!audioUrl}
             onClick={() => {
               const audio =
                 document.querySelector<HTMLAudioElement>("#lecture-audio");
@@ -861,13 +869,15 @@ function Detail({ snapshot }: { snapshot: RecordingSnapshot }) {
           </button>
           <span />
           <small>
-            {audioUrl ? "Piste locale" : "Piste en cours de préparation"}
+            {audioUrl ? "Piste locale · prête à écouter" : audioError ? "Piste locale indisponible" : "Préparation de la piste locale…"}
           </small>
           {audioUrl && (
             <audio
               id="lecture-audio"
               src={audioUrl}
+              controls
               onEnded={() => setPlaying(false)}
+              onError={() => setAudioError("Impossible de lire cette piste locale.")}
             />
           )}
         </div>
