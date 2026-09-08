@@ -559,9 +559,17 @@ function Setup({
                 {error}
               </p>
             )}
+            {!ready && !error && (
+              <p className="availability-note compact">
+                <span>!</span>
+                {!course.trim()
+                  ? "Ajoutez le nom du cours pour commencer."
+                  : "Choisissez l’application qui joue votre cours."}
+              </p>
+            )}
             <div className="action-row">
               <p className="local-note">
-                <span>⌁</span> Enregistré localement sur ce Mac
+                <span>⌁</span> Audio seulement · enregistré localement sur ce Mac
               </p>
               <button
                 className="record-button"

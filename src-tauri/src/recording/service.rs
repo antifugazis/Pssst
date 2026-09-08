@@ -42,21 +42,28 @@ impl<B: CaptureBackend> RecordingService<B> {
                 return Err(anyhow!(error));
             }
         }
+        let mut microphone_warning = None;
         if session.microphone_included {
             let mic_path = self.store.track_path(&session, TrackKind::Microphone)?;
             match self.backend.start_capture(CaptureRequest { application: session.selected_application.clone(), track: TrackKind::Microphone }, &mic_path) {
                 Ok(handle) => handles.push(handle),
                 Err(error) => {
-                    for handle in handles { let _ = self.backend.stop_capture(handle); }
-                    let mut failed = session.clone();
-                    failed.recording_state = RecordingState::Failed;
-                    failed.last_error = Some(format!("Microphone could not start: {error}"));
-                    self.store.save(&failed)?;
-                    return Err(anyhow!(error));
+                    // The microphone is explicitly optional. A microphone
+                    // permission/device failure must never discard an active
+                    // application capture or make Start appear broken.
+                    microphone_warning = Some(format!("Microphone could not start: {error}"));
                 }
             }
         }
         let recording = self.store.mark_recording(&session.id)?;
+        let recording = if let Some(warning) = microphone_warning {
+            let mut updated = recording.clone();
+            updated.last_error = Some(warning);
+            self.store.save(&updated)?;
+            updated
+        } else {
+            recording
+        };
         self.active.insert(recording.id, handles);
         super::spawn_processing(self.store.clone(), recording.id);
         Ok(snapshot(recording))
