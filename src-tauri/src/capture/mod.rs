@@ -6,10 +6,10 @@ use thiserror::Error;
 pub enum TrackKind { Application, Microphone }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct CaptureApplication { pub id: String, pub name: String, pub icon_hint: String, pub available: bool }
+pub struct CaptureApplication { pub id: String, pub name: String, pub icon_hint: String, pub icon_data: Option<String>, pub available: bool }
 impl CaptureApplication {
     pub fn new(id: impl Into<String>, name: impl Into<String>, icon_hint: impl Into<String>) -> Self {
-        Self { id: id.into(), name: name.into(), icon_hint: icon_hint.into(), available: true }
+        Self { id: id.into(), name: name.into(), icon_hint: icon_hint.into(), icon_data: None, available: true }
     }
 }
 

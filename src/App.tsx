@@ -20,7 +20,7 @@ type View =
   | "detail"
   | "settings";
 type UiSource = CaptureSource & {
-  native: { id: string; name: string; icon_hint: string; available: boolean };
+  native: { id: string; name: string; icon_hint: string; icon_data?: string | null; available: boolean };
 };
 
 const fallback: UiSource[] = [
@@ -433,6 +433,7 @@ function Setup({
             name: application.name,
             detail: "Application ouverte",
             available: application.available,
+            iconData: application.icon_data,
             native: application,
           })),
         ),
@@ -835,7 +836,9 @@ function Detail({ snapshot }: { snapshot: RecordingSnapshot }) {
 }
 
 function Settings() {
-  const [mode, setMode] = useState("automatic");
+  const [mode, setMode] = useState(
+    () => localStorage.getItem("pssst.transcription-mode") ?? "automatic",
+  );
   const [link, setLink] = useState(
     () => localStorage.getItem("pssst.connection-link") ?? "",
   );
@@ -844,6 +847,13 @@ function Settings() {
   const [model, setModel] = useState(
     () => localStorage.getItem("pssst.openrouter-model") ?? "",
   );
+  const [accountName, setAccountName] = useState(
+    () => localStorage.getItem("pssst.account-name") ?? "",
+  );
+  const [accountEmail, setAccountEmail] = useState(
+    () => localStorage.getItem("pssst.account-email") ?? "",
+  );
+  const [accountSaved, setAccountSaved] = useState(false);
   const connect = async () => {
     try {
       const result = await fetch(link).then((response) => {
@@ -861,7 +871,21 @@ function Settings() {
       );
     }
   };
-  const save = () => localStorage.setItem("pssst.openrouter-model", model);
+  const save = () => {
+    localStorage.setItem("pssst.openrouter-model", model);
+    localStorage.setItem("pssst.transcription-mode", mode);
+    localStorage.setItem("pssst.account-name", accountName);
+    localStorage.setItem("pssst.account-email", accountEmail);
+    setAccountSaved(true);
+    window.setTimeout(() => setAccountSaved(false), 1800);
+  };
+  const clearAccount = () => {
+    localStorage.removeItem("pssst.account-name");
+    localStorage.removeItem("pssst.account-email");
+    setAccountName("");
+    setAccountEmail("");
+    setAccountSaved(false);
+  };
   const install = "curl -fsSL https://raw.githubusercontent.com/pssst/pssst/main/server/install.sh | sudo bash";
   return (
     <main className="settings-page">
@@ -874,6 +898,30 @@ function Settings() {
         </h1>
       </div>
       <section className="settings-form">
+        <section className="settings-section account-section">
+          <div className="settings-section-heading">
+            <div>
+              <p className="eyebrow">COMPTE</p>
+              <h2>Votre espace Pssst</h2>
+            </div>
+            <span className="account-badge">Sur ce Mac</span>
+          </div>
+          <p className="settings-copy">Gardez vos préférences et vos cours identifiables sans envoyer vos enregistrements ailleurs.</p>
+          <div className="settings-grid">
+            <label>
+              Nom
+              <input value={accountName} onChange={(event) => setAccountName(event.target.value)} placeholder="Votre nom" />
+            </label>
+            <label>
+              Adresse e-mail
+              <input type="email" value={accountEmail} onChange={(event) => setAccountEmail(event.target.value)} placeholder="vous@exemple.fr" />
+            </label>
+          </div>
+          <div className="account-actions">
+            <button className="quiet-button" onClick={clearAccount}>Effacer le profil</button>
+            {accountSaved && <span className="saved-state">Profil enregistré</span>}
+          </div>
+        </section>
         <label>
           Transcription
           <select

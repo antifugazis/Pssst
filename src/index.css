@@ -33,8 +33,10 @@ input:focus-visible {
 }
 
 .app-shell {
+  height: 100vh;
   min-height: 100vh;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   position: relative;
   background:
     radial-gradient(
@@ -328,6 +330,10 @@ h1 em {
   height: 23px;
   width: 23px;
 }
+.source-mark--native {
+  object-fit: cover;
+  padding: 0;
+}
 .source-mark--zoom {
   background: #4e7bd9;
 }
@@ -401,6 +407,8 @@ h1 em {
   right: 0;
   top: calc(100% + 7px);
   z-index: 10;
+  max-height: min(390px, calc(100vh - 170px));
+  overflow-y: auto;
 }
 .source-option {
   align-items: center;
@@ -1360,6 +1368,62 @@ h1 em {
 .detail-head h1 {
   font-size: 50px;
 }
+.settings-form {
+  min-width: 0;
+}
+.settings-section {
+  background: rgba(255, 255, 255, 0.58);
+  border: 1px solid #dedbd2;
+  border-radius: 15px;
+  padding: 20px;
+}
+.settings-section-heading {
+  align-items: flex-start;
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+}
+.settings-section-heading h2 {
+  font: 500 24px/1.1 "Fraunces", serif;
+  letter-spacing: -0.03em;
+  margin: 6px 0 0;
+}
+.account-badge {
+  background: #e8f0e5;
+  border-radius: 999px;
+  color: #64805f;
+  font: 10px "DM Mono", monospace;
+  padding: 6px 9px;
+  white-space: nowrap;
+}
+.settings-copy {
+  color: #778177;
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 12px 0 18px;
+  max-width: 520px;
+}
+.settings-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.account-actions {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  margin-top: 15px;
+}
+.quiet-button {
+  background: transparent;
+  border: 1px solid #d8d6cf;
+  border-radius: 8px;
+  color: #758075;
+  font-size: 11px;
+  padding: 8px 10px;
+}
+.quiet-button:hover { background: #fff; color: #29352c; }
+.saved-state { color: #64805f; font-size: 11px; }
 .new-recording {
   background: #27342b;
   color: white;

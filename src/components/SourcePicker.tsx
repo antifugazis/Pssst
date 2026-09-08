@@ -8,7 +8,11 @@ interface SourcePickerProps {
   onSelect: (source: CaptureSource) => void;
 }
 
-function SourceMark({ id }: { id: CaptureSource['id'] }) {
+function SourceMark({ source }: { source: CaptureSource }) {
+  const { id } = source;
+  if (source.iconData) {
+    return <img aria-hidden="true" className="source-mark source-mark--native" src={source.iconData} alt="" />;
+  }
   if (id === 'zoom') {
     return <span aria-hidden="true" className="source-mark source-mark--zoom"><svg viewBox="0 0 24 24"><rect x="3" y="6.5" width="11.5" height="11" rx="3" fill="white"/><path d="m16.3 10 4.2-2.2v8.4L16.3 14V10Z" fill="white"/></svg></span>;
   }
@@ -35,7 +39,7 @@ export function SourcePicker({ sources, selected, open, onOpenChange, onSelect }
         onClick={() => onOpenChange(!open)}
         type="button"
       >
-        {selected ? <SourceMark id={selected.id} /> : <span className="source-placeholder-mark"><span /></span>}
+        {selected ? <SourceMark source={selected} /> : <span className="source-placeholder-mark"><span /></span>}
         <span id="source-value" className="source-trigger-copy">
           <strong>{label}</strong>
           <small>{selected ? (selected.available ? selected.detail : 'Cette application n’est plus ouverte') : 'Sélectionnez l’app qui joue votre cours'}</small>
@@ -52,7 +56,7 @@ export function SourcePicker({ sources, selected, open, onOpenChange, onSelect }
             role="option"
             type="button"
           >
-            <SourceMark id={source.id} />
+            <SourceMark source={source} />
             <span className="source-option-copy"><strong>{source.name}</strong><small>{source.available ? source.detail : 'Non ouverte — choisissez une autre application'}</small></span>
             {source.available ? <span className="source-status">Active</span> : <span className="source-status source-status--closed">Fermée</span>}
           </button>

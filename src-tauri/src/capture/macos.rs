@@ -1,7 +1,7 @@
 //! ScreenCaptureKit implementation. It deliberately owns the streams and file
 //! writers on the Rust side; a webview redraw or a server outage cannot stop a
 //! lecture already being written to disk.
-use std::{collections::HashMap, fs::File, io::{Seek, SeekFrom, Write}, path::Path, sync::{Arc, Mutex}};
+use std::{collections::HashMap, fs::{self, File}, io::{Seek, SeekFrom, Write}, path::{Path, PathBuf}, process::Command, sync::{Arc, Mutex}};
 
 use screencapturekit::{cm::CMSampleBufferExt, prelude::*};
 
@@ -36,12 +36,31 @@ impl SCStreamOutputTrait for AudioHandler { fn did_output_sample_buffer(&self, s
 struct ActiveCapture { stream: SCStream, writer: Arc<Mutex<WavWriter>> }
 
 pub struct MacCaptureBackend { next_handle: u64, active: HashMap<u64, ActiveCapture> }
+
+/// Resolve the real application icon from the running app bundle. The webview
+/// receives a data URL, so it can render the same icon macOS shows in Finder
+/// without depending on an icon CDN or a hard-coded app list.
+fn application_icon_data(bundle_id: &str) -> Option<String> {
+    let query = format!("kMDItemCFBundleIdentifier == '{}'", bundle_id.replace('\'', "\\'"));
+    let output = Command::new("/usr/bin/mdfind").arg(query).output().ok()?;
+    let bundle = String::from_utf8_lossy(&output.stdout).lines().next()?.trim().to_string();
+    if bundle.is_empty() { return None; }
+    let resources = PathBuf::from(&bundle).join("Contents/Resources");
+    let icon = fs::read_dir(resources).ok()?.filter_map(Result::ok).map(|entry| entry.path()).find(|path| path.extension().and_then(|ext| ext.to_str()).map(|ext| ext.eq_ignore_ascii_case("icns")).unwrap_or(false))?;
+    let temp = std::env::temp_dir().join(format!("pssst-icon-{}.png", std::process::id()));
+    let _ = Command::new("/usr/bin/sips").args(["-s", "format", "png", icon.to_str()?, "--out", temp.to_str()?]).output().ok()?;
+    let bytes = fs::read(&temp).ok()?;
+    let _ = fs::remove_file(&temp);
+    use base64::Engine;
+    Some(format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes)))
+}
+
 impl MacCaptureBackend { pub fn new() -> Self { Self { next_handle: 1, active: HashMap::new() } } }
 impl CaptureBackend for MacCaptureBackend {
     fn list_applications(&self) -> Result<Vec<CaptureApplication>, CaptureError> {
         let content = SCShareableContent::get().map_err(|_| CaptureError::PermissionRequired)?;
         let snapshot = content.snapshot().ok_or(CaptureError::PermissionRequired)?;
-        Ok(snapshot.applications.iter().filter(|application| application.process_id > 0).map(|application| CaptureApplication { id: format!("sc-{}", application.process_id), name: application.application_name.clone(), icon_hint: application.bundle_identifier.clone(), available: true }).collect())
+        Ok(snapshot.applications.iter().filter(|application| application.process_id > 0).map(|application| CaptureApplication { id: format!("sc-{}", application.process_id), name: application.application_name.clone(), icon_hint: application.bundle_identifier.clone(), icon_data: application_icon_data(&application.bundle_identifier), available: true }).collect())
     }
     fn permission_status(&self) -> Result<CapturePermission, CaptureError> { SCShareableContent::get().map(|_| CapturePermission::Granted).map_err(|_| CaptureError::PermissionRequired) }
     fn request_permission(&self) -> Result<CapturePermission, CaptureError> { self.permission_status() }

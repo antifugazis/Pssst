@@ -5,6 +5,7 @@ export interface CaptureSource {
   name: string;
   detail: string;
   available: boolean;
+  iconData?: string | null;
 }
 
 export interface RecordingSetup {
