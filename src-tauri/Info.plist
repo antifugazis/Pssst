@@ -5,4 +5,9 @@
   <string>pssst captures your questions on a separate local audio track when you choose to include your microphone.</string>
   <key>NSAudioCaptureUsageDescription</key>
   <string>Pssst captures audio from the class application you choose.</string>
+  <key>NSAppTransportSecurity</key>
+  <dict>
+    <key>NSAllowsArbitraryLoads</key>
+    <true/>
+  </dict>
 </dict></plist>

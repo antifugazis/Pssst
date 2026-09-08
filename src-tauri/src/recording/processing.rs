@@ -7,7 +7,20 @@ const CHUNK_SECONDS: usize = 25; const WAV_HEADER: usize = 44; const BYTES_PER_S
 
 /// One worker per session. It only reads completed windows; capture keeps sole ownership of the live track.
 pub fn spawn_processing(store: SessionStore, id: Uuid) { let _ = thread::Builder::new().name(format!("pssst-processing-{id}")).spawn(move || { let mut failures = 0u32; loop { let live = store.load(&id).map(|s| s.recording_state == RecordingState::Recording).unwrap_or(false); match process_once(&store, id, !live) { Ok(()) => failures = 0, Err(error) => { failures = failures.saturating_add(1); eprintln!("pssst processing: {error:#}"); } } if !live { break; } thread::sleep(Duration::from_secs(2u64.saturating_pow(failures.min(4)))); } }); }
-pub fn resume_pending(store: SessionStore) { let directory = store.root().join("sessions"); if let Ok(entries) = fs::read_dir(directory) { for entry in entries.flatten() { if let Ok(id) = Uuid::parse_str(&entry.file_name().to_string_lossy()) { if store.queue_path(&id).exists() { spawn_processing(store.clone(), id); } } } } }
+pub fn resume_pending(store: SessionStore) {
+    let directory = store.root().join("sessions");
+    if let Ok(entries) = fs::read_dir(directory) {
+        for entry in entries.flatten() {
+            if let Ok(id) = Uuid::parse_str(&entry.file_name().to_string_lossy()) {
+                if let Ok(session) = store.load(&id) {
+                    if session.transcript_segments.is_empty() && session.recording_state == RecordingState::Stopped {
+                        spawn_processing(store.clone(), id);
+                    }
+                }
+            }
+        }
+    }
+}
 
 fn process_once(store: &SessionStore, id: Uuid, finalizing: bool) -> Result<()> { let session = store.load(&id)?; let source = store.track_path(&session, TrackKind::Application)?; let mut queue = refresh_queue(store, id, &source, finalizing)?; let (base, secret) = server_connection(store)?; let client = Client::builder().timeout(Duration::from_secs(120)).default_headers({ let mut h=reqwest::header::HeaderMap::new(); h.insert(reqwest::header::AUTHORIZATION, format!("Bearer {secret}").parse()?); h }).build()?; client.post(format!("{base}/v1/sessions/{id}")).send()?.error_for_status()?;
 for index in 0..queue.items.len() { if queue.items[index].state == "complete" { continue; } queue.items[index].attempts += 1; queue.items[index].state = "uploading".into(); save(store,id,&queue)?; let item = queue.items[index].clone(); match upload(&client,&base,id,&item) { Ok(()) => { queue.items[index].state="complete".into(); queue.items[index].last_error=None; save(store,id,&queue)?; sync(&client,&base,store,id)?; }, Err(error) => { queue.items[index].state="retry".into(); queue.items[index].last_error=Some(error.to_string()); save(store,id,&queue)?; let mut s=store.load(&id)?; s.transcription_state=TrackProcessingState::Failed; s.last_error=queue.items[index].last_error.clone(); store.save(&s)?; return Err(error); } } }

@@ -810,7 +810,25 @@ function Detail({ snapshot }: { snapshot: RecordingSnapshot }) {
   const [audioUrl, setAudioUrl] = useState("");
   const [audioError, setAudioError] = useState("");
   const [playing, setPlaying] = useState(false);
-  const session = snapshot.session;
+  const [session, setSession] = useState(snapshot.session);
+
+  useEffect(() => {
+    setSession(snapshot.session);
+  }, [snapshot]);
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    const timer = window.setInterval(() => {
+      native
+        .get(session.id)
+        .then((next) => {
+          setSession(next.session);
+        })
+        .catch(() => undefined);
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [session.id]);
+
   useEffect(() => {
     if (!isTauri()) return;
     let objectUrlToRevoke: string | null = null;
@@ -969,12 +987,14 @@ function Settings() {
   const [accountSaved, setAccountSaved] = useState(false);
   const connect = async () => {
     try {
-      const result = await fetch(link).then((response) => {
-        if (!response.ok)
-          throw new Error("Lien invalide ou serveur indisponible");
-        return response.json();
-      });
-      localStorage.setItem("pssst.connection-link", link);
+      const result = isTauri()
+        ? await native.validateServerLink(link.trim())
+        : await fetch(link.trim()).then((response) => {
+            if (!response.ok)
+              throw new Error("Lien invalide ou serveur indisponible");
+            return response.json();
+          });
+      localStorage.setItem("pssst.connection-link", link.trim());
       setConnection(
         `Connecté · faster-whisper · ${result.capabilities.whisper_model}`,
       );
@@ -1136,6 +1156,10 @@ export default function App() {
   };
   useEffect(() => {
     refreshLibrary().catch(() => undefined);
+    const savedLink = preference.get("pssst.connection-link");
+    if (savedLink && isTauri()) {
+      native.validateServerLink(savedLink.trim()).catch(() => undefined);
+    }
   }, []);
   const start = async (source: UiSource, course: string, mic: boolean) => {
     if (!isTauri()) {

@@ -75,7 +75,7 @@ impl<B: CaptureBackend> RecordingService<B> {
             for handle in handles { self.backend.stop_capture(handle).map_err(|error| anyhow!(error))?; }
         }
         let stopped = self.store.stop(&session.id)?;
-        // The session worker sees the stopped state and flushes exactly one final partial chunk.
+        super::spawn_processing(self.store.clone(), stopped.id);
         Ok(snapshot(stopped))
     }
 
