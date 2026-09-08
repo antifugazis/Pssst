@@ -5,7 +5,6 @@ import { MicrophoneToggle } from "./components/MicrophoneToggle";
 import { SourcePicker } from "./components/SourcePicker";
 import { canStartRecording } from "./features/recording/setup";
 import type { CaptureSource } from "./features/recording/types";
-import pssstLogo from "./assets/pssst-logo.png";
 import {
   isTauri,
   native,
@@ -91,7 +90,12 @@ const preference = {
 };
 
 function Logo() {
-  return <img aria-hidden="true" className="brand-logo" src={pssstLogo} alt="" />;
+  return (
+    <div aria-hidden="true" className="brand-mark">
+      <span />
+      <i />
+    </div>
+  );
 }
 function Header({
   view,
@@ -134,12 +138,15 @@ function Onboarding({ finish }: { finish: () => void }) {
       if (!/^https?:$/.test(url.protocol) || !url.pathname.includes("/connect/")) {
         throw new Error("Collez le connection link complet de votre serveur Pssst.");
       }
-      const response = await fetch(url.toString());
-      if (!response.ok) {
-        if (response.status === 401) throw new Error("Ce connection link est invalide ou révoqué.");
-        throw new Error(`Le serveur répond avec une erreur (${response.status}).`);
-      }
-      const result = await response.json();
+      const result = isTauri()
+        ? await native.validateServerLink(url.toString())
+        : await fetch(url.toString()).then(async (response) => {
+            if (!response.ok) {
+              if (response.status === 401) throw new Error("Ce connection link est invalide ou révoqué.");
+              throw new Error(`Le serveur répond avec une erreur (${response.status}).`);
+            }
+            return response.json();
+          });
       if (!result?.capabilities?.faster_whisper) {
         throw new Error("Ce serveur n’est pas un serveur Whisper Pssst.");
       }
