@@ -976,7 +976,10 @@ function Settings() {
   const [connection, setConnection] = useState("");
   const [copied, setCopied] = useState(false);
   const [model, setModel] = useState(
-    () => localStorage.getItem("pssst.openrouter-model") ?? "",
+    () => localStorage.getItem("pssst.openrouter-model") ?? "openai/gpt-4o-mini",
+  );
+  const [apiKey, setApiKey] = useState(
+    () => localStorage.getItem("pssst.openrouter-api-key") ?? "",
   );
   const [accountName, setAccountName] = useState(
     () => localStorage.getItem("pssst.account-name") ?? "",
@@ -1005,7 +1008,8 @@ function Settings() {
     }
   };
   const save = () => {
-    localStorage.setItem("pssst.openrouter-model", model);
+    localStorage.setItem("pssst.openrouter-model", model.trim());
+    localStorage.setItem("pssst.openrouter-api-key", apiKey.trim());
     localStorage.setItem("pssst.transcription-mode", mode);
     localStorage.setItem("pssst.account-name", accountName);
     localStorage.setItem("pssst.account-email", accountEmail);
@@ -1106,17 +1110,39 @@ function Settings() {
             )}
           </>
         )}
-        <label>
-          Modèle OpenRouter{" "}
-          <small>
-            Optionnel — utilisé uniquement pour corriger les transcriptions.
-          </small>
-          <input
-            value={model}
-            onChange={(event) => setModel(event.target.value)}
-            placeholder="openai/gpt-4.1-mini"
-          />
-        </label>
+        <section className="settings-section">
+          <div className="settings-section-heading">
+            <div>
+              <p className="eyebrow">CORRECTION IA</p>
+              <h2>OpenRouter</h2>
+            </div>
+            <span className="account-badge">Optionnel</span>
+          </div>
+          <p className="settings-copy">
+            Corrige automatiquement la grammaire et la ponctuation du texte transcrit sans modifier l’enregistrement brut.
+          </p>
+          <div className="settings-grid">
+            <label>
+              Clé API OpenRouter
+              <input
+                type="password"
+                value={apiKey}
+                onChange={(event) => setApiKey(event.target.value)}
+                placeholder="sk-or-v1-..."
+                spellCheck={false}
+              />
+            </label>
+            <label>
+              Modèle
+              <input
+                value={model}
+                onChange={(event) => setModel(event.target.value)}
+                placeholder="openai/gpt-4o-mini"
+                spellCheck={false}
+              />
+            </label>
+          </div>
+        </section>
         <label className="settings-switch">
           Inclure mon micro par défaut
           <input type="checkbox" defaultChecked />
