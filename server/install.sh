@@ -5,33 +5,70 @@ set -euo pipefail
 # It deliberately keeps implementation knobs out of the normal setup path.
 INSTALL_DIR="${PSSST_INSTALL_DIR:-/opt/pssst-whisper}"
 DATA_DIR="${PSSST_DATA_DIR:-/var/lib/pssst-whisper}"
+LOG_FILE="${PSSST_INSTALL_LOG:-/tmp/pssst-install.log}"
 
-if [[ "$(id -u)" != "0" ]]; then echo "Run this installer as root: sudo bash" >&2; exit 1; fi
+if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+  BOLD=$'\033[1m'; DIM=$'\033[2m'; GREEN=$'\033[32m'; YELLOW=$'\033[33m'; RESET=$'\033[0m'
+else
+  BOLD=''; DIM=''; GREEN=''; YELLOW=''; RESET=''
+fi
+
+section() { printf '\n%s%s%s\n' "$BOLD" "$1" "$RESET"; }
+info() { printf '%s  %s%s\n' "$DIM" "$1" "$RESET"; }
+success() { printf '  %s✓%s %s\n' "$GREEN" "$RESET" "$1"; }
+warn() { printf '  %s! %s%s\n' "$YELLOW" "$1" "$RESET" >&2; }
+pretty() { printf '%s' "$1" | awk '{print toupper(substr($0,1,1)) substr($0,2)}'; }
+fail() {
+  printf '\n%sInstallation failed.%s\n' "$YELLOW" "$RESET" >&2
+  printf '  Full log: %s\n' "$LOG_FILE" >&2
+  [[ -f "$LOG_FILE" ]] && tail -n 12 "$LOG_FILE" >&2 || true
+  exit 1
+}
+run_step() {
+  local label="$1"; shift
+  info "$label…"
+  if "$@" >>"$LOG_FILE" 2>&1; then success "$label"; else fail; fi
+}
+prompt() {
+  local answer
+  if [[ -t 0 ]]; then
+    read -r answer
+  elif [[ -t 1 && -r /dev/tty ]]; then
+    read -r answer </dev/tty
+  else
+    read -r answer
+  fi
+  printf '%s\n' "$answer"
+}
+
+if [[ "$(id -u)" != "0" && "${PSSST_TEST_ONLY:-0}" != "1" ]]; then echo "Run this installer as root: sudo bash" >&2; exit 1; fi
 
 cores="$(nproc 2>/dev/null || echo 1)"
 ram_gb="$(awk '/MemTotal/ {printf "%.0f", $2/1024/1024}' /proc/meminfo 2>/dev/null || echo '?')"
 arch="$(uname -m)"
+cpu_name="$(awk -F: '/model name|Hardware/ {gsub(/^ +/, "", $2); print $2; exit}' /proc/cpuinfo 2>/dev/null || echo "$arch")"
 gpu="none"; device="cpu"; compute="int8"
 if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then gpu="NVIDIA GPU"; device="cuda"; compute="float16"; fi
 
-echo
-echo "pssst Whisper setup"
-echo "───────────────────"
-echo "Detected:"
-echo "  $arch · $cores CPU cores · ${ram_gb} GB RAM · $gpu"
-echo
+section "pssst"
+printf '%sSelf-hosted Whisper setup%s\n' "$DIM" "$RESET"
+section "Detected hardware"
+printf '  %-10s %s · %s cores\n' "CPU" "$cpu_name" "$cores"
+printf '  %-10s %s GB\n' "Memory" "$ram_gb"
+printf '  %-10s %s\n' "GPU" "$gpu"
 
 recommended_model="medium"
-if [[ "$ram_gb" =~ ^[0-9]+$ ]] && (( ram_gb < 6 )); then recommended_model="small"; fi
+if [[ "$ram_gb" =~ ^[0-9]+$ ]] && (( ram_gb < 3 )); then recommended_model="small"; fi
 recommended_compute="$device $compute"
-echo "Recommended setup:"
-echo "  Whisper $(tr '[:lower:]' '[:upper:]' <<< "${recommended_model:0:1}")${recommended_model:1} · $recommended_compute · Balanced quality"
-echo
+section "Recommended"
+printf '  %s · %s · Balanced\n' "$(pretty "$recommended_model")" "$recommended_compute"
+if [[ "$ram_gb" =~ ^[0-9]+$ ]] && (( ram_gb >= 3 && ram_gb < 6 )); then info "Medium is heavier on this machine; available swap is recommended."; fi
 
 model="${PSSST_MODEL:-}"
 if [[ -z "$model" ]]; then
-  printf "Whisper model [1] Small  [2] Medium (recommended)  [3] Large-v3  [r] Use recommended: "
-  read -r model_choice
+  section "Whisper model"
+  printf '  1  Small\n     Faster, lighter\n  2  Medium\n     Best balance of accuracy and speed\n  3  Large-v3\n     Highest accuracy, much heavier\n\nChoose a model [%s]: ' "$([[ "$recommended_model" == small ]] && echo 1 || echo 2)"
+  model_choice="$(prompt)"
   case "${model_choice:-r}" in
     1) model=small;; 2) model=medium;; 3) model=large-v3;; r|R) model="$recommended_model";; *) model="$recommended_model";;
   esac
@@ -39,27 +76,34 @@ fi
 
 quality="${PSSST_QUALITY:-}"
 if [[ -z "$quality" ]]; then
-  printf "Processing quality [1] Fast  [2] Balanced (recommended)  [3] Best accuracy: "
-  read -r quality_choice
+  section "Processing"
+  printf '  1  Fast\n  2  Balanced\n  3  Best accuracy\n\nChoose a preset [2]: '
+  quality_choice="$(prompt)"
   case "${quality_choice:-2}" in 1) quality=fast;; 3) quality=best;; *) quality=balanced;; esac
 fi
 
 language="${PSSST_LANGUAGE:-fr}"
 if [[ -z "${PSSST_LANGUAGE:-}" ]]; then
-  printf "Language [1] French (recommended): "
-  read -r language_choice
-  [[ "${language_choice:-1}" == 1 ]] && language=fr || language=fr
+  section "Language"
+  printf '  1  French\n\nChoose a language [1]: '
+  language_choice="$(prompt)"
+  language=fr
 fi
 
-echo
-echo "Installing the pssst Whisper worker…"
+if [[ "${PSSST_TEST_ONLY:-0}" == "1" ]]; then
+  printf 'Test selections: model=%s quality=%s language=%s\n' "${model:-$recommended_model}" "${quality:-balanced}" "$language"
+  exit 0
+fi
+
+section "Installing pssst"
+ : > "$LOG_FILE"
 export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq
-apt-get install -y -qq python3 python3-venv python3-pip ffmpeg curl ca-certificates
-mkdir -p "$INSTALL_DIR" "$DATA_DIR"
-python3 -m venv "$INSTALL_DIR/.venv"
-"$INSTALL_DIR/.venv/bin/pip" install --upgrade pip >/dev/null
-"$INSTALL_DIR/.venv/bin/pip" install 'fastapi>=0.115,<1' 'uvicorn[standard]>=0.30,<1' 'python-multipart>=0.0.12,<1' 'faster-whisper>=1.1,<2' >/dev/null
+run_step "Installing system dependencies" apt-get update -qq
+run_step "Installing system packages" apt-get install -y -qq python3 python3-venv python3-pip ffmpeg curl ca-certificates
+run_step "Creating Python environment" mkdir -p "$INSTALL_DIR" "$DATA_DIR"
+run_step "Creating Python environment" python3 -m venv "$INSTALL_DIR/.venv"
+run_step "Updating Python tools" "$INSTALL_DIR/.venv/bin/pip" install --upgrade pip
+run_step "Installing Whisper runtime" "$INSTALL_DIR/.venv/bin/pip" install 'fastapi>=0.115,<1' 'uvicorn[standard]>=0.30,<1' 'python-multipart>=0.0.12,<1' 'faster-whisper>=1.1,<2'
 
 cat > "$INSTALL_DIR/worker.py" <<'PSSST_WORKER_PY'
 """Lightweight self-hosted pssst Whisper worker.
@@ -118,10 +162,11 @@ def transcribe(session_id: str, sequence: int):
 def transcript(session_id: str): return read_transcript(session_id)
 PSSST_WORKER_PY
 
-"$INSTALL_DIR/.venv/bin/python" -m py_compile "$INSTALL_DIR/worker.py"
+run_step "Validating worker" "$INSTALL_DIR/.venv/bin/python" -m py_compile "$INSTALL_DIR/worker.py"
 
-echo "Preparing Whisper $model (the first download can take a while)…"
-PSSST_MODEL="$model" "$INSTALL_DIR/.venv/bin/python" -c 'import os; from faster_whisper import WhisperModel; WhisperModel(os.environ["PSSST_MODEL"], device="cpu", compute_type="int8")' >/dev/null
+info "Downloading $(pretty "$model") model (the first download can take a while)…"
+if ! PSSST_MODEL="$model" "$INSTALL_DIR/.venv/bin/python" -c 'import os; from faster_whisper import WhisperModel; WhisperModel(os.environ["PSSST_MODEL"], device="cpu", compute_type="int8")' >>"$LOG_FILE" 2>&1; then fail; fi
+success "$(pretty "$model") model ready"
 
 cat > /etc/systemd/system/pssst-whisper.service <<EOF
 [Unit]
@@ -144,21 +189,19 @@ ReadWritePaths=$DATA_DIR
 [Install]
 WantedBy=multi-user.target
 EOF
-systemctl daemon-reload
-systemctl enable --now pssst-whisper
+run_step "Starting pssst service" systemctl daemon-reload
+run_step "Starting pssst service" systemctl enable --now pssst-whisper
 sleep 2
-if ! curl -fsS http://127.0.0.1:8000/healthz >/dev/null; then echo "The worker did not become healthy. Check: systemctl status pssst-whisper" >&2; exit 1; fi
+if ! curl -fsS http://127.0.0.1:8000/healthz >>"$LOG_FILE" 2>&1; then
+  warn "The worker did not become healthy. Check: sudo systemctl status pssst-whisper"
+  fail
+fi
 
 host="$(hostname -I | awk '{print $1}')"
 secret="$(cat "$DATA_DIR/connection-secret")"
-pretty_model="${model^}"
-echo
-echo "pssst Whisper is ready."
-echo "Model: $pretty_model"
-echo "Quality: ${quality^}"
-echo "Language: French"
-echo
-echo "Connection link:"
-echo "http://$host:8000/connect/$secret"
-echo
-echo "Paste this link into: pssst → Transcription → My pssst server"
+pretty_model="$(pretty "$model")"
+section "pssst is ready"
+printf 'Model: %s\nQuality: %s\nLanguage: French\n\n' "$pretty_model" "$(pretty "$quality")"
+printf '%sConnection link%s\n  http://%s:8000/connect/%s\n\n' "$BOLD" "$RESET" "$host" "$secret"
+printf '%sKeep this link private — anyone with it can use this Whisper server.%s\n\n' "$DIM" "$RESET"
+printf 'Service\n  sudo systemctl status pssst-whisper\n'
