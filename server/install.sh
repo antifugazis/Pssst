@@ -218,11 +218,12 @@ ReadWritePaths=$DATA_DIR
 WantedBy=multi-user.target
 EOF
 run_step "Reloading service manager" systemctl daemon-reload
-run_step "Starting pssst service" systemctl enable --now pssst-whisper
+run_step "Enabling pssst service" systemctl enable pssst-whisper
+run_step "Starting pssst service" systemctl restart pssst-whisper
 info "Waiting for Whisper to become ready…"
 healthy=0
 for _ in $(seq 1 60); do
-  if curl -fsS "http://127.0.0.1:$PORT/healthz" >>"$LOG_FILE" 2>&1; then healthy=1; break; fi
+  if curl -fsS "http://127.0.0.1:$PORT/healthz" >/dev/null 2>&1; then healthy=1; break; fi
   sleep 1
 done
 if (( healthy == 0 )); then
