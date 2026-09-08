@@ -11,6 +11,7 @@ app_path="$applications_dir/Pssst.app"
 
 cd "$task_root"
 npm exec tauri build -- --debug --bundles app
+pkill -f '/Applications/Pssst.app/Contents/MacOS/pssst' 2>/dev/null || true
 mkdir -p "$applications_dir"
 ditto "$bundle_path" "$app_path"
 open -n "$app_path"

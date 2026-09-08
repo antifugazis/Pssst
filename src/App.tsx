@@ -8,6 +8,7 @@ import type { CaptureSource } from "./features/recording/types";
 import {
   isTauri,
   native,
+  requestCapturePermission,
   type LocalSession,
   type RecordingSnapshot,
 } from "./native";
@@ -424,13 +425,24 @@ function Setup({
   const [error, setError] = useState("");
   const [permissionRequired, setPermissionRequired] = useState(false);
   const requestedIcons = useRef(new Set<string>());
+  const requestedSystemCapturePermission = useRef(false);
   const loadApplications = async () => {
     if (!isTauri()) return;
     try {
       const status = await native.capturePermissionStatus();
       const needsPermission = status !== "granted";
       setPermissionRequired(needsPermission);
-      if (needsPermission) return;
+      if (needsPermission) {
+        // A legacy build can have completed onboarding before Pssst had its
+        // stable signed identity. Ask once from this actual bundle so macOS
+        // creates the TCC entry that ScreenCaptureKit evaluates.
+        if (!requestedSystemCapturePermission.current) {
+          requestedSystemCapturePermission.current = true;
+          const granted = await native.requestScreenRecordingAccess();
+          if (granted) await loadApplications();
+        }
+        return;
+      }
       const applications = await native.applications();
       setSources((current) =>
         applications.map((application) => ({
@@ -504,11 +516,15 @@ function Setup({
             <button
               className="record-button"
               onClick={async () => {
-                await native.openScreenRecordingSettings();
+                const granted = await requestCapturePermission();
+                if (granted) {
+                  await loadApplications();
+                  return;
+                }
                 window.setTimeout(() => void loadApplications(), 900);
               }}
             >
-              Ouvrir les réglages macOS
+              Autoriser dans macOS
             </button>
             <small>
               Activez pssst, puis revenez ici et relancez l’application.
