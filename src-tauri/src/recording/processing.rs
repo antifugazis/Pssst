@@ -37,12 +37,17 @@ pub fn run_correction(store: &SessionStore, id: Uuid) -> Result<()> {
         anyhow::bail!("No transcript segments to correct yet");
     }
 
-    // Group segments into ~60s windows so the model gets enough context.
-    let batch_ms = 60_000i64;
+    let mut updated = session.clone();
+    updated.correction_state = TrackProcessingState::Uploading;
+    updated.last_error = None;
+    store.save(&updated)?;
+
+    // Group segments into ~45s windows so the model gets enough context while updating frequently.
+    let batch_ms = 45_000i64;
     let mut groups: Vec<Vec<usize>> = Vec::new();
-    for (i, seg) in session.transcript_segments.iter().enumerate() {
+    for (i, seg) in updated.transcript_segments.iter().enumerate() {
         match groups.last() {
-            Some(current) if seg.start_ms - session.transcript_segments[current[0]].start_ms < batch_ms => {
+            Some(current) if seg.start_ms - updated.transcript_segments[current[0]].start_ms < batch_ms => {
                 groups.last_mut().unwrap().push(i);
             }
             _ => groups.push(vec![i]),
@@ -52,7 +57,6 @@ pub fn run_correction(store: &SessionStore, id: Uuid) -> Result<()> {
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(120))
         .build()?;
-    let mut updated = session.clone();
 
     for group in &groups {
         let raw_lines: Vec<&str> = group.iter().map(|&i| updated.transcript_segments[i].raw_text.as_str()).collect();
@@ -65,14 +69,29 @@ pub fn run_correction(store: &SessionStore, id: Uuid) -> Result<()> {
                 {"role": "user", "content": format!("Transcription brute:\n{joined}")}
             ]
         });
-        let response = client
+        let response = match client
             .post("https://openrouter.ai/api/v1/chat/completions")
             .header("Authorization", format!("Bearer {api_key}"))
             .json(&body)
-            .send()?;
+            .send()
+        {
+            Ok(res) => res,
+            Err(err) => {
+                updated.correction_state = TrackProcessingState::Failed;
+                updated.last_error = Some(err.to_string());
+                let _ = store.save(&updated);
+                return Err(err.into());
+            }
+        };
+
         if !response.status().is_success() {
-            anyhow::bail!("OpenRouter returned HTTP {}: {}", response.status(), response.text().unwrap_or_default());
+            let msg = format!("OpenRouter returned HTTP {}: {}", response.status(), response.text().unwrap_or_default());
+            updated.correction_state = TrackProcessingState::Failed;
+            updated.last_error = Some(msg.clone());
+            let _ = store.save(&updated);
+            anyhow::bail!("{msg}");
         }
+
         let result: serde_json::Value = response.json()?;
         let mut corrected_joined = result["choices"][0]["message"]["content"]
             .as_str()
@@ -108,6 +127,9 @@ pub fn run_correction(store: &SessionStore, id: Uuid) -> Result<()> {
                 }
             }
         }
+
+        // Save immediately after each chunk completes so UI updates procedurally
+        store.save(&updated)?;
     }
 
     updated.correction_state = TrackProcessingState::Uploaded;

@@ -853,6 +853,8 @@ function Detail({
 
   useEffect(() => {
     if (!isTauri()) return;
+    const intervalMs =
+      correcting || session.correction_state === "uploading" ? 400 : 3000;
     const timer = window.setInterval(() => {
       native
         .get(session.id)
@@ -860,9 +862,9 @@ function Detail({
           setSession(next.session);
         })
         .catch(() => undefined);
-    }, 3000);
+    }, intervalMs);
     return () => window.clearInterval(timer);
-  }, [session.id]);
+  }, [session.id, correcting, session.correction_state]);
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -989,9 +991,11 @@ function Detail({
               onClick={async () => {
                 if (!isTauri()) return;
                 setCorrecting(true);
-                setCorrectionMessage("");
+                setCorrectionMessage("Correction en temps réel…");
                 try {
                   await native.correctSession(session.id);
+                  const updated = await native.get(session.id);
+                  setSession(updated.session);
                   setCorrectionMessage("Correction terminée.");
                 } catch (error) {
                   setCorrectionMessage(String(error));
