@@ -847,14 +847,26 @@ function Detail({
   const [correcting, setCorrecting] = useState(false);
   const [correctionMessage, setCorrectionMessage] = useState("");
 
+  const isCorrecting =
+    correcting || session.correction_state === "uploading";
+
   useEffect(() => {
     setSession(snapshot.session);
   }, [snapshot]);
 
   useEffect(() => {
+    if (session.correction_state === "uploaded" && correcting) {
+      setCorrecting(false);
+      setCorrectionMessage("Correction terminée.");
+    } else if (session.correction_state === "failed" && correcting) {
+      setCorrecting(false);
+      setCorrectionMessage(session.last_error || "Échec de la correction.");
+    }
+  }, [session.correction_state, session.last_error, correcting]);
+
+  useEffect(() => {
     if (!isTauri()) return;
-    const intervalMs =
-      correcting || session.correction_state === "uploading" ? 400 : 3000;
+    const intervalMs = isCorrecting ? 400 : 3000;
     const timer = window.setInterval(() => {
       native
         .get(session.id)
@@ -864,7 +876,7 @@ function Detail({
         .catch(() => undefined);
     }, intervalMs);
     return () => window.clearInterval(timer);
-  }, [session.id, correcting, session.correction_state]);
+  }, [session.id, isCorrecting]);
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -987,24 +999,20 @@ function Detail({
             <button
               type="button"
               className="correct-button"
-              disabled={correcting || !session.transcript_segments.length}
+              disabled={isCorrecting || !session.transcript_segments.length}
               onClick={async () => {
                 if (!isTauri()) return;
                 setCorrecting(true);
-                setCorrectionMessage("Correction en temps réel…");
+                setCorrectionMessage("Correction en cours…");
                 try {
                   await native.correctSession(session.id);
-                  const updated = await native.get(session.id);
-                  setSession(updated.session);
-                  setCorrectionMessage("Correction terminée.");
                 } catch (error) {
-                  setCorrectionMessage(String(error));
-                } finally {
                   setCorrecting(false);
+                  setCorrectionMessage(String(error));
                 }
               }}
             >
-              {correcting ? "Correction en cours…" : "Corriger la transcription"}
+              {isCorrecting ? "Correction en cours…" : "Corriger la transcription"}
             </button>
             {correctionMessage && (
               <span className="correct-status">{correctionMessage}</span>

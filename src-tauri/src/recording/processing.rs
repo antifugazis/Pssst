@@ -22,11 +22,33 @@ pub fn resume_pending(store: SessionStore) {
     }
 }
 
-/// Trigger a one-shot correction pass for a session. Used by the
-/// "Corriger la transcription" button in the Detail view. Correction runs
-/// locally on the desktop — it calls OpenRouter directly with the user's own
-/// API key and stores corrected text in the local manifest. The Whisper server
-/// is not involved in correction at all.
+/// Trigger a one-shot correction pass for a session on a background thread.
+/// Used by the "Corriger la transcription" button in the Detail view.
+/// Correction runs locally on the desktop — it calls OpenRouter directly
+/// with the user's own API key and stores corrected text in the local manifest
+/// incrementally after each chunk completes.
+pub fn spawn_correction(store: SessionStore, id: Uuid) -> Result<()> {
+    let _ = openrouter_config(&store).context("OpenRouter is not configured. Save your API key and model in Settings.")?;
+    let session = store.load(&id)?;
+    if session.transcript_segments.is_empty() {
+        anyhow::bail!("No transcript segments to correct yet");
+    }
+
+    let mut initial = session.clone();
+    initial.correction_state = TrackProcessingState::Uploading;
+    initial.last_error = None;
+    store.save(&initial)?;
+
+    let _ = thread::Builder::new()
+        .name(format!("pssst-correction-{id}"))
+        .spawn(move || {
+            match run_correction(&store, id) {
+                Ok(()) => eprintln!("pssst correction: completed for {id}"),
+                Err(error) => eprintln!("pssst correction: {error:#} for {id}"),
+            }
+        });
+    Ok(())
+}
 
 const CORRECTION_PROMPT: &str = "Tu corriges une transcription automatique de cours universitaire en français.\nDétermine ce que le professeur a réellement dit, sans améliorer sa manière de parler.\nCorrige uniquement les erreurs probables de reconnaissance vocale. Conserve hésitations,\nrépétitions, faux départs, expressions orales et grammaire parlée. Ne reformule pas, ne\nrésume pas, n'ajoute aucune information et ne corrige pas les faits. Quand une notation\ntechnique est clairement dictée, écris-la normalement (free tiret h → free -h, égal égal → ==).\nSi c'est incertain, conserve le texte. Retourne uniquement la transcription corrigée.\nLe texte t'est envoyé ligne par ligne, une ligne par segment. Retourne exactement le même\nnombre de lignes, dans le même ordre, une correction par ligne.";
 
