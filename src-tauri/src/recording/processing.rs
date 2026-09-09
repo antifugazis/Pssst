@@ -1,4 +1,4 @@
-use std::{fs, io::Write, path::PathBuf, thread, time::Duration};
+use std::{fs, io::Write, path::PathBuf, sync::{Arc, Mutex}, thread, time::Duration};
 use anyhow::{Context, Result}; use reqwest::blocking::{multipart, Client}; use serde::{Deserialize, Serialize}; use uuid::Uuid;
 use crate::capture::TrackKind; use super::{LocalTranscriptSegment, RecordingState, SessionStore, TrackProcessingState};
 const CHUNK_SECONDS: usize = 25; const WAV_HEADER: usize = 44; const BYTES_PER_SECOND: usize = 48_000 * 2 * 2;
@@ -52,6 +52,64 @@ pub fn spawn_correction(store: SessionStore, id: Uuid) -> Result<()> {
 
 const CORRECTION_PROMPT: &str = "Tu corriges une transcription automatique de cours universitaire en français.\nDétermine ce que le professeur a réellement dit, sans améliorer sa manière de parler.\nCorrige uniquement les erreurs probables de reconnaissance vocale. Conserve hésitations,\nrépétitions, faux départs, expressions orales et grammaire parlée. Ne reformule pas, ne\nrésume pas, n'ajoute aucune information et ne corrige pas les faits. Quand une notation\ntechnique est clairement dictée, écris-la normalement (free tiret h → free -h, égal égal → ==).\nSi c'est incertain, conserve le texte. Retourne uniquement la transcription corrigée.\nLe texte t'est envoyé ligne par ligne, une ligne par segment. Retourne exactement le même\nnombre de lignes, dans le même ordre, une correction par ligne.";
 
+fn correct_single_group(
+    client: &reqwest::blocking::Client,
+    api_key: &str,
+    model: &str,
+    raw_lines: &[&str],
+) -> Result<Vec<String>> {
+    let joined = raw_lines.join("\n");
+    let body = serde_json::json!({
+        "model": model,
+        "temperature": 0,
+        "messages": [
+            {"role": "system", "content": CORRECTION_PROMPT},
+            {"role": "user", "content": format!("Transcription brute:\n{joined}")}
+        ]
+    });
+    let response = client
+        .post("https://openrouter.ai/api/v1/chat/completions")
+        .header("Authorization", format!("Bearer {api_key}"))
+        .json(&body)
+        .send()?;
+
+    if !response.status().is_success() {
+        let msg = format!("OpenRouter returned HTTP {}: {}", response.status(), response.text().unwrap_or_default());
+        anyhow::bail!("{msg}");
+    }
+
+    let result: serde_json::Value = response.json()?;
+    let mut corrected_joined = result["choices"][0]["message"]["content"]
+        .as_str()
+        .context("OpenRouter returned no content")?
+        .trim()
+        .to_string();
+
+    for prefix in ["Transcription corrigée :", "Transcription corrigée:", "Transcription corrigée", "Voici la transcription corrigée :"] {
+        if let Some(rest) = corrected_joined.strip_prefix(prefix) {
+            corrected_joined = rest.trim().to_string();
+            break;
+        }
+    }
+
+    let corrected_lines: Vec<&str> = corrected_joined.lines().collect();
+    let mut out = Vec::with_capacity(raw_lines.len());
+    if corrected_lines.len() == raw_lines.len() {
+        for line in corrected_lines {
+            out.push(line.trim().to_string());
+        }
+    } else {
+        for (j, raw) in raw_lines.iter().enumerate() {
+            if j < corrected_lines.len() {
+                out.push(corrected_lines[j].trim().to_string());
+            } else {
+                out.push(raw.to_string());
+            }
+        }
+    }
+    Ok(out)
+}
+
 pub fn run_correction(store: &SessionStore, id: Uuid) -> Result<()> {
     let (api_key, model) = openrouter_config(store).context("OpenRouter is not configured. Save your API key and model in Settings.")?;
     let session = store.load(&id)?;
@@ -64,8 +122,8 @@ pub fn run_correction(store: &SessionStore, id: Uuid) -> Result<()> {
     updated.last_error = None;
     store.save(&updated)?;
 
-    // Group segments into ~45s windows so the model gets enough context while updating frequently.
-    let batch_ms = 45_000i64;
+    // Group segments into ~90s windows for optimal context and speed.
+    let batch_ms = 90_000i64;
     let mut groups: Vec<Vec<usize>> = Vec::new();
     for (i, seg) in updated.transcript_segments.iter().enumerate() {
         match groups.last() {
@@ -77,85 +135,66 @@ pub fn run_correction(store: &SessionStore, id: Uuid) -> Result<()> {
     }
 
     let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(120))
+        .timeout(Duration::from_secs(60))
         .build()?;
 
-    for group in &groups {
-        let raw_lines: Vec<&str> = group.iter().map(|&i| updated.transcript_segments[i].raw_text.as_str()).collect();
-        let joined = raw_lines.join("\n");
-        let body = serde_json::json!({
-            "model": model,
-            "temperature": 0,
-            "messages": [
-                {"role": "system", "content": CORRECTION_PROMPT},
-                {"role": "user", "content": format!("Transcription brute:\n{joined}")}
-            ]
+    // Shared state protected by Mutex so parallel workers can save incrementally as each finishes.
+    let shared_session = Arc::new(Mutex::new((store.clone(), updated)));
+    let first_error = Arc::new(Mutex::new(None::<String>));
+
+    // Process up to 4 groups concurrently in parallel chunks.
+    let chunk_size = 4;
+    for group_chunk in groups.chunks(chunk_size) {
+        std::thread::scope(|s| {
+            for group in group_chunk {
+                let group = group.clone();
+                let client = &client;
+                let api_key = &api_key;
+                let model = &model;
+                let shared_session = Arc::clone(&shared_session);
+                let first_error = Arc::clone(&first_error);
+
+                s.spawn(move || {
+                    let raw_lines: Vec<String> = {
+                        let guard = shared_session.lock().unwrap();
+                        group.iter().map(|&i| guard.1.transcript_segments[i].raw_text.clone()).collect()
+                    };
+                    let raw_refs: Vec<&str> = raw_lines.iter().map(|s| s.as_str()).collect();
+
+                    match correct_single_group(client, api_key, model, &raw_refs) {
+                        Ok(corrected_lines) => {
+                            let mut guard = shared_session.lock().unwrap();
+                            for (j, &i) in group.iter().enumerate() {
+                                if j < corrected_lines.len() {
+                                    guard.1.transcript_segments[i].corrected_text = Some(corrected_lines[j].clone());
+                                    guard.1.transcript_segments[i].final_text = Some(corrected_lines[j].clone());
+                                }
+                            }
+                            let _ = guard.0.save(&guard.1);
+                        }
+                        Err(err) => {
+                            let mut err_guard = first_error.lock().unwrap();
+                            if err_guard.is_none() {
+                                *err_guard = Some(err.to_string());
+                            }
+                        }
+                    }
+                });
+            }
         });
-        let response = match client
-            .post("https://openrouter.ai/api/v1/chat/completions")
-            .header("Authorization", format!("Bearer {api_key}"))
-            .json(&body)
-            .send()
-        {
-            Ok(res) => res,
-            Err(err) => {
-                updated.correction_state = TrackProcessingState::Failed;
-                updated.last_error = Some(err.to_string());
-                let _ = store.save(&updated);
-                return Err(err.into());
-            }
-        };
 
-        if !response.status().is_success() {
-            let msg = format!("OpenRouter returned HTTP {}: {}", response.status(), response.text().unwrap_or_default());
-            updated.correction_state = TrackProcessingState::Failed;
-            updated.last_error = Some(msg.clone());
-            let _ = store.save(&updated);
-            anyhow::bail!("{msg}");
+        if let Some(err_msg) = first_error.lock().unwrap().clone() {
+            let mut guard = shared_session.lock().unwrap();
+            guard.1.correction_state = TrackProcessingState::Failed;
+            guard.1.last_error = Some(err_msg.clone());
+            let _ = guard.0.save(&guard.1);
+            anyhow::bail!("{err_msg}");
         }
-
-        let result: serde_json::Value = response.json()?;
-        let mut corrected_joined = result["choices"][0]["message"]["content"]
-            .as_str()
-            .context("OpenRouter returned no content")?
-            .trim()
-            .to_string();
-        // Strip common prefixes the model adds despite instructions.
-        for prefix in ["Transcription corrigée :", "Transcription corrigée:", "Transcription corrigée", "Voici la transcription corrigée :"] {
-            if let Some(rest) = corrected_joined.strip_prefix(prefix) {
-                corrected_joined = rest.trim().to_string();
-                break;
-            }
-        }
-        let corrected_lines: Vec<&str> = corrected_joined.lines().collect();
-        if corrected_lines.len() == group.len() {
-            for (j, &i) in group.iter().enumerate() {
-                updated.transcript_segments[i].corrected_text = Some(corrected_lines[j].trim().to_string());
-                updated.transcript_segments[i].final_text = Some(corrected_lines[j].trim().to_string());
-            }
-        } else {
-            // Line count mismatch: distribute what we can, keep raw for the rest.
-            // This avoids dumping the whole batch into one segment (which causes
-            // duplication when the other segments fall back to raw text).
-            for (j, &i) in group.iter().enumerate() {
-                if j < corrected_lines.len() {
-                    updated.transcript_segments[i].corrected_text = Some(corrected_lines[j].trim().to_string());
-                    updated.transcript_segments[i].final_text = Some(corrected_lines[j].trim().to_string());
-                } else {
-                    // Keep raw text as the corrected text so there's no duplication.
-                    let raw = updated.transcript_segments[i].raw_text.clone();
-                    updated.transcript_segments[i].corrected_text = Some(raw.clone());
-                    updated.transcript_segments[i].final_text = Some(raw);
-                }
-            }
-        }
-
-        // Save immediately after each chunk completes so UI updates procedurally
-        store.save(&updated)?;
     }
 
-    updated.correction_state = TrackProcessingState::Uploaded;
-    store.save(&updated)?;
+    let mut guard = shared_session.lock().unwrap();
+    guard.1.correction_state = TrackProcessingState::Uploaded;
+    guard.0.save(&guard.1)?;
     Ok(())
 }
 
