@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { Library as LibraryIcon, Plus, Settings as SettingsIcon, Square } from "lucide-react";
+import { ArrowLeft, Library as LibraryIcon, Plus, Settings as SettingsIcon, Square } from "lucide-react";
 import { CourseInput } from "./components/CourseInput";
 import { MicrophoneToggle } from "./components/MicrophoneToggle";
 import { SourcePicker } from "./components/SourcePicker";
@@ -836,9 +836,11 @@ function Library({
 function Detail({
   snapshot,
   continueCourse,
+  onBack,
 }: {
   snapshot: RecordingSnapshot;
   continueCourse: (course: string, appId?: string | null, mic?: boolean) => void;
+  onBack?: () => void;
 }) {
   const [version, setVersion] = useState("final");
   const [audioUrl, setAudioUrl] = useState("");
@@ -935,6 +937,17 @@ function Detail({
   );
   return (
     <main className="detail-page">
+      {onBack && (
+        <button
+          type="button"
+          className="back-link"
+          onClick={onBack}
+          aria-label="Retour aux cours"
+        >
+          <ArrowLeft size={16} aria-hidden="true" />
+          <span>Cours</span>
+        </button>
+      )}
       <div className="detail-head">
         <div>
           <p className="eyebrow">{session.course.toUpperCase()}</p>
@@ -1413,7 +1426,11 @@ export default function App() {
           />
         )}
         {view === "detail" && snapshot && (
-          <Detail snapshot={snapshot} continueCourse={continueCourse} />
+          <Detail
+            snapshot={snapshot}
+            continueCourse={continueCourse}
+            onBack={() => setView("library")}
+          />
         )}
         {view === "settings" && <Settings />}
       </div>

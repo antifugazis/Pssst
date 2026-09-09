@@ -1205,8 +1205,21 @@ h1 em {
 .back-link {
   background: none;
   border: 0;
-  color: inherit;
+  color: #7c847c;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 4px 0;
+  margin-bottom: 22px;
+  border-radius: 6px;
+  transition: color 0.15s ease, transform 0.15s ease;
+}
+.back-link:hover {
+  color: #1f2521;
+  transform: translateX(-2px);
 }
 .brand-button {
   padding: 0;
