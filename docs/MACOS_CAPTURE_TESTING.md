@@ -28,7 +28,7 @@ launches it. Re-run after every change to `src-tauri/`.
 2. Select the application, enter a course name, and start recording.
    The primary action stays disabled until both are set.
 3. While recording, verify in the app data directory
-   (`~/Library/Application Support/com.irisla.pssst.desktop/sessions/<id>/`):
+   (`~/Library/Application Support/com.irisla.pssst.desktop/recordings/sessions/<id>/`):
    - `application/track.wav` and `microphone/track.wav` both grow
    - `manifest.json` shows `recording_state: "recording"`
    - `application/chunks/*.wav` appear in ~25s windows as the upload queue works
