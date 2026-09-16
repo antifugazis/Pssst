@@ -3,7 +3,7 @@
   "productName": "Pssst",
   "version": "0.12.28",
   "identifier": "com.irisla.pssst.desktop",
-  "build": { "frontendDist": "../dist", "devUrl": "http://localhost:1420", "beforeDevCommand": "npm run dev", "beforeBuildCommand": "npm run build" },
+  "build": { "frontendDist": "../dist", "devUrl": "http://localhost:1420", "beforeDevCommand": "pnpm dev", "beforeBuildCommand": "pnpm build" },
   "app": { "windows": [{ "title": "Pssst", "width": 1040, "height": 760, "minWidth": 620, "minHeight": 620, "resizable": true }], "security": { "csp": null, "assetProtocol": { "enable": true, "scope": ["$APPDATA/**"] } } },
   "bundle": {
     "active": true,

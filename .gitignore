@@ -3,3 +3,25 @@
 /node_modules
 /src-tauri/target
 .DS_Store
+
+# Build output
+/dist
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
+
+# Backend
+backend/.env
+backend/data/
+backend/.venv/
+backend/.pytest_cache/
+backend/*.egg-info/
+__pycache__/
+*.py[cod]
+
+# Runtime data & secrets
+/data/
+
+# Screenshots & tooling scratch
+/*.png
+/.playwright-mcp/
