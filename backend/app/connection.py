@@ -2,8 +2,9 @@
 import hmac
 import os
 import secrets
-from pathlib import Path
+
 from fastapi import Header, HTTPException
+
 from .config import settings
 
 _secret: str | None = None

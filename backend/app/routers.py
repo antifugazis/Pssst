@@ -1,16 +1,17 @@
 import uuid
 from pathlib import Path
-from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from .config import settings
+from .connection import authorize, connection_secret, revoke_and_regenerate
+from .correction import OpenRouterCorrectionProvider
 from .db import get_db
 from .models import AudioChunk, CorrectionBatch, Session, TranscriptSegment
-from .correction import OpenRouterCorrectionProvider
 from .transcription import FasterWhisperProvider
-from .connection import authorize, connection_secret, revoke_and_regenerate
 
 router = APIRouter(prefix="/v1", dependencies=[Depends(authorize)])
 connect_router = APIRouter()
@@ -18,8 +19,8 @@ whisper = FasterWhisperProvider()
 correction = OpenRouterCorrectionProvider()
 
 class CorrectRequest(BaseModel):
-    openrouter_api_key: Optional[str] = None
-    openrouter_model: Optional[str] = None
+    openrouter_api_key: str | None = None
+    openrouter_model: str | None = None
 
 @connect_router.get("/connect/{secret}")
 async def connect(secret: str):
@@ -126,7 +127,7 @@ async def correct_transcript(session_id: uuid.UUID, final: bool = False, body: C
                     if final: rows[idx].final_text = ""
                     else: rows[idx].corrected_text = ""
         batch.status = "complete"; await db.commit()
-    except Exception as error:
+    except Exception as error:  # noqa: BLE001 - any provider failure must be recorded, never lost
         batch.status = "blocked" if not effective_key else "failed"; await db.commit()
         return {"state": batch.status, "detail": str(error), "segment_count": 0}
     return {"state": "complete", "segment_count": len(rows), "final": final}

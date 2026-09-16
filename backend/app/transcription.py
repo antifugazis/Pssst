@@ -1,7 +1,10 @@
 """Real faster-whisper adapter; loading remains lazy so recording/upload endpoints stay responsive."""
 from pathlib import Path
+
 from faster_whisper import WhisperModel
+
 from .config import settings
+
 
 class FasterWhisperProvider:
     _model: WhisperModel | None = None
