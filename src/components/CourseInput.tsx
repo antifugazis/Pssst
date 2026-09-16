@@ -1,3 +1,5 @@
+import { useT } from '../i18n';
+
 interface CourseInputProps {
   value: string;
   onChange: (value: string) => void;
@@ -7,12 +9,13 @@ interface CourseInputProps {
 const defaultCourses = ['Architecture des ordinateurs', 'Analyse numérique', 'Systèmes d’exploitation'];
 
 export function CourseInput({ value, onChange, suggestions = [] }: CourseInputProps) {
+  const t = useT();
   const courses = Array.from(new Set([...suggestions.filter(Boolean), ...defaultCourses]));
   return (
     <div className="field course-field">
       <div className="field-label-row">
-        <label className="field-label" htmlFor="course">Cours</label>
-        <span className="field-hint">Pour retrouver et continuer l’enregistrement</span>
+        <label className="field-label" htmlFor="course">{t('field.course')}</label>
+        <span className="field-hint">{t('field.course.hint')}</span>
       </div>
       <div className="course-input-wrap">
         <span aria-hidden="true">⌘</span>
@@ -21,7 +24,7 @@ export function CourseInput({ value, onChange, suggestions = [] }: CourseInputPr
           id="course"
           list="recent-courses"
           onChange={(event) => onChange(event.target.value)}
-          placeholder="Ex. Architecture des ordinateurs"
+          placeholder={t('field.course.ph')}
           value={value}
         />
       </div>
@@ -32,7 +35,7 @@ export function CourseInput({ value, onChange, suggestions = [] }: CourseInputPr
       </datalist>
       {!value && (
         <div className="recent-courses">
-          <span>Récents</span>
+          <span>{t('field.course.recent')}</span>
           {courses.slice(0, 3).map((course) => (
             <button key={course} onClick={() => onChange(course)} type="button">
               {course}

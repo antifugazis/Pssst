@@ -1,3 +1,4 @@
+import { useT } from '../i18n';
 import type { CaptureSource } from '../features/recording/types';
 
 interface SourcePickerProps {
@@ -23,12 +24,13 @@ function SourceMark({ source }: { source: CaptureSource }) {
 }
 
 export function SourcePicker({ sources, selected, open, onOpenChange, onSelect }: SourcePickerProps) {
-  const label = selected ? selected.name : 'Choisir une application';
+  const t = useT();
+  const label = selected ? selected.name : t('field.source.choose');
 
   return <div className="field">
     <div className="field-label-row">
-      <label id="source-label" className="field-label">Audio de la classe</label>
-      <span className="field-hint">Applications ouvertes</span>
+      <label id="source-label" className="field-label">{t('field.source')}</label>
+      <span className="field-hint">{t('field.source.hint')}</span>
     </div>
     <div className="source-picker">
       <button
@@ -42,7 +44,7 @@ export function SourcePicker({ sources, selected, open, onOpenChange, onSelect }
         {selected ? <SourceMark source={selected} /> : <span className="source-placeholder-mark"><span /></span>}
         <span id="source-value" className="source-trigger-copy">
           <strong>{label}</strong>
-          <small>{selected ? (selected.available ? selected.detail : 'Cette application n’est plus ouverte') : 'Sélectionnez l’app qui joue votre cours'}</small>
+          <small>{selected ? (selected.available ? selected.detail : t('field.source.gone')) : t('field.source.pick')}</small>
         </span>
         <span aria-hidden="true" className={`chevron ${open ? 'is-open' : ''}`}>⌄</span>
       </button>
@@ -57,12 +59,12 @@ export function SourcePicker({ sources, selected, open, onOpenChange, onSelect }
             type="button"
           >
             <SourceMark source={source} />
-            <span className="source-option-copy"><strong>{source.name}</strong><small>{source.available ? source.detail : 'Non ouverte — choisissez une autre application'}</small></span>
-            {source.available ? <span className="source-status">Active</span> : <span className="source-status source-status--closed">Fermée</span>}
+            <span className="source-option-copy"><strong>{source.name}</strong><small>{source.available ? source.detail : t('field.source.closed')}</small></span>
+            {source.available ? <span className="source-status">{t('field.source.active')}</span> : <span className="source-status source-status--closed">{t('field.source.closedTag')}</span>}
           </button>
         ))}
       </div>}
     </div>
-    {selected && !selected.available && <p className="availability-note"><span aria-hidden="true">!</span> Safari n’est pas ouverte. Relancez-la ou choisissez une autre application.</p>}
+    {selected && !selected.available && <p className="availability-note"><span aria-hidden="true">!</span> {t('field.source.notOpen', { name: selected.name })}</p>}
   </div>;
 }

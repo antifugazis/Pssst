@@ -14,6 +14,7 @@ import {
   type LocalSession,
   type RecordingSnapshot,
 } from "./native";
+import { getLang, setLang, useLang, useT, t, type Lang } from "./i18n";
 
 type View =
   | "setup"
@@ -26,11 +27,11 @@ type UiSource = CaptureSource & {
   native: { id: string; name: string; icon_hint: string; icon_data?: string | null; available: boolean };
 };
 
-const fallback: UiSource[] = [
+const fallbackSources = (): UiSource[] => [
   {
     id: "zoom",
     name: "Zoom Workplace",
-    detail: "Réunion en cours",
+    detail: t("setup.src.meeting"),
     available: true,
     native: {
       id: "zoom",
@@ -54,7 +55,7 @@ const fallback: UiSource[] = [
   {
     id: "safari",
     name: "Safari",
-    detail: "Application fermée",
+    detail: t("setup.src.closed"),
     available: false,
     native: {
       id: "safari",
@@ -64,17 +65,14 @@ const fallback: UiSource[] = [
     },
   },
 ];
-const previewLines = [
-  "Donc si on prend la mémoire cache comme exemple, on a une hiérarchie.",
-  "Le processeur ne va pas chercher directement dans la RAM à chaque fois.",
-  "Et là vous avez une ligne de cache, euh, qui contient plusieurs octets.",
-];
+
 const formatTime = (seconds: number) =>
   `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 const formatDate = (date: string) =>
-  new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short" }).format(
-    new Date(date),
-  );
+  new Intl.DateTimeFormat(getLang() === "fr" ? "fr-FR" : "en-US", {
+    day: "numeric",
+    month: "short",
+  }).format(new Date(date));
 const preference = {
   get: (key: string) => {
     try {
@@ -107,22 +105,23 @@ function Header({
   view: View;
   setView: (view: View) => void;
 }) {
+  const t = useT();
   return (
     <header className="app-header product-header">
       <button className="brand brand-button" onClick={() => setView("setup")}>
         <Logo />
         <span className="sr-only">Pssst</span>
       </button>
-      <nav aria-label="Navigation principale">
+      <nav aria-label={t("nav.main")}>
         <button onClick={() => setView("library")}>
-          <LibraryIcon size={15} aria-hidden="true" /> Cours
+          <LibraryIcon size={15} aria-hidden="true" /> {t("nav.courses")}
         </button>
         <button onClick={() => setView("settings")}>
-          <SettingsIcon size={15} aria-hidden="true" /> Réglages
+          <SettingsIcon size={15} aria-hidden="true" /> {t("nav.settings")}
         </button>
       </nav>
       <div className="ready-status">
-        <span /> {view === "recording" ? "En cours" : "Prêt"}
+        <span /> {view === "recording" ? t("status.recording") : t("status.ready")}
         <small>v0.12.28</small>
       </div>
     </header>
@@ -130,6 +129,7 @@ function Header({
 }
 
 function Onboarding({ finish }: { finish: () => void }) {
+  const t = useT();
   const [step, setStep] = useState(0);
   const [mode, setMode] = useState(
     () => preference.get("pssst.transcription-mode") ?? "automatic",
@@ -141,39 +141,39 @@ function Onboarding({ finish }: { finish: () => void }) {
   );
   const [serverReady, setServerReady] = useState(() => Boolean(preference.get("pssst.connection-link")));
   const [serverError, setServerError] = useState(() =>
-    preference.get("pssst.connection-link") ? "Serveur enregistré" : "",
+    preference.get("pssst.connection-link") ? t("onb.server.saved") : "",
   );
   const connectServer = async () => {
     const link = serverLink.trim();
     try {
       const url = new URL(link);
       if (!/^https?:$/.test(url.protocol) || !url.pathname.includes("/connect/")) {
-        throw new Error("Collez le connection link complet de votre serveur Pssst.");
+        throw new Error(t("onb.server.badLink"));
       }
       const result = isTauri()
         ? await native.validateServerLink(url.toString())
         : await fetch(url.toString()).then(async (response) => {
             if (!response.ok) {
-              if (response.status === 401) throw new Error("Ce connection link est invalide ou révoqué.");
-              throw new Error(`Le serveur répond avec une erreur (${response.status}).`);
+              if (response.status === 401) throw new Error(t("onb.server.revoked"));
+              throw new Error(t("onb.server.httpError", { status: response.status }));
             }
             return response.json();
           });
       if (!result?.capabilities?.faster_whisper) {
-        throw new Error("Ce serveur n’est pas un serveur Whisper Pssst.");
+        throw new Error(t("onb.server.notWhisper"));
       }
       preference.set("pssst.connection-link", url.toString());
       setServerReady(true);
       setServerLink(url.toString());
-      setServerError(`Connecté - Whisper ${result.capabilities.whisper_model}`);
+      setServerError(t("onb.server.ok", { model: result.capabilities.whisper_model }));
     } catch (error) {
       setServerReady(false);
       setServerError(
         error instanceof TypeError
-          ? "Impossible de joindre le serveur. Vérifiez son adresse, son port et son accès réseau."
+          ? t("onb.server.unreachable")
           : error instanceof Error
             ? error.message
-            : "Connexion impossible",
+            : t("onb.server.failed"),
       );
     }
   };
@@ -211,66 +211,59 @@ function Onboarding({ finish }: { finish: () => void }) {
       <div key={step} className="onboarding-content onboarding-step">
         {step === 0 && (
           <>
-            <p className="eyebrow">BIENVENUE DANS PSSST</p>
+            <p className="eyebrow">{t("onb.step0.eyebrow")}</p>
             <h1>
-              Souvenez-vous du cours.
+              {t("onb.step0.titleA")}
               <br />
-              <em>Pas de la prise de notes.</em>
+              <em>{t("onb.step0.titleB")}</em>
             </h1>
-            <p>
-              pssst enregistre l’audio de votre classe localement et crée une
-              transcription fidèle pendant que vous écoutez.
-            </p>
+            <p>{t("onb.step0.copy")}</p>
           </>
         )}
         {step === 1 && (
           <>
-            <p className="eyebrow">COMMENT ÇA MARCHE</p>
+            <p className="eyebrow">{t("onb.step1.eyebrow")}</p>
             <h1>
-              Vous écoutez.
+              {t("onb.step1.titleA")}
               <br />
-              <em>pssst s’occupe du reste.</em>
+              <em>{t("onb.step1.titleB")}</em>
             </h1>
             <div className="flow-line">
-              <span>Audio de la classe</span>
+              <span>{t("onb.step1.flow.capture")}</span>
               <b>→</b>
-              <span>Enregistré localement</span>
+              <span>{t("onb.step1.flow.local")}</span>
               <b>→</b>
               <span>Whisper</span>
               <b>→</b>
-              <span>Correction optionnelle</span>
+              <span>{t("onb.step1.flow.correction")}</span>
             </div>
-            <p>
-              L’enregistrement est toujours sauvegardé sur ce Mac en premier.
-              Internet ou la transcription peuvent attendre sans interrompre
-              votre cours.
-            </p>
+            <p>{t("onb.step1.copy")}</p>
           </>
         )}
         {step === 2 && (
           <>
-            <p className="eyebrow">TRANSCRIPTION</p>
+            <p className="eyebrow">{t("onb.step2.eyebrow")}</p>
             <h1>
-              Où doit tourner
+              {t("onb.step2.titleA")}
               <br />
-              <em>Whisper ?</em>
+              <em>{t("onb.step2.titleB")}</em>
             </h1>
             <div className="choice-list">
               {[
                 [
                   "automatic",
-                  "Automatic — Recommandé",
-                  "pssst choisit la meilleure option disponible.",
+                  t("onb.step2.auto.title"),
+                  t("onb.step2.auto.copy"),
                 ],
                 [
                   "local",
-                  "On this Mac",
-                  "Privé, fonctionne hors ligne. Un modèle Whisper sera téléchargé.",
+                  t("onb.step2.local.title"),
+                  t("onb.step2.local.copy"),
                 ],
                 [
                   "server",
-                  "My pssst server",
-                  "Utilisez votre serveur FastAPI + faster-whisper.",
+                  t("onb.step2.server.title"),
+                  t("onb.step2.server.copy"),
                 ],
               ].map(([id, title, copy]) => (
                 <button
@@ -290,31 +283,28 @@ function Onboarding({ finish }: { finish: () => void }) {
         )}
         {step === 3 && mode === "server" && (
           <>
-            <p className="eyebrow">CONNEXION SERVEUR</p>
+            <p className="eyebrow">{t("onb.step3s.eyebrow")}</p>
             <h1>
-              Connectez votre
+              {t("onb.step3s.titleA")}
               <br />
-              <em>serveur pssst.</em>
+              <em>{t("onb.step3s.titleB")}</em>
             </h1>
-            <p>
-              Vous avez un serveur Linux&nbsp;? Copiez la commande dans son
-              terminal, puis collez ici le lien sécurisé qu’il vous donne.
-            </p>
+            <p>{t("onb.step3s.copy")}</p>
             <div className="model-install server-connect-card">
-              <strong>1. Installer pssst Whisper</strong>
+              <strong>{t("onb.step3s.install")}</strong>
               <div className="command-box">
                 <code>curl -fsSL https://irisla.com/pssst/install.sh | sudo bash</code>
                 <button
                   className="copy-icon"
-                  aria-label="Copier la commande"
-                  title="Copier la commande"
+                  aria-label={t("onb.copyCmd")}
+                  title={t("onb.copyCmd")}
                   onClick={() => navigator.clipboard?.writeText("curl -fsSL https://irisla.com/pssst/install.sh | sudo bash")}
                 >
                   <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>
                 </button>
               </div>
               <label>
-                <strong>2. Connection link</strong>
+                <strong>{t("onb.step3s.linkLabel")}</strong>
                 <input
                   value={serverLink}
                   onChange={(event) => {
@@ -322,12 +312,12 @@ function Onboarding({ finish }: { finish: () => void }) {
                     setServerReady(false);
                     setServerError("");
                   }}
-                  placeholder="https://votre-serveur/connect/..."
+                  placeholder={t("onb.step3s.linkPlaceholder")}
                   spellCheck={false}
                 />
               </label>
               <button className="record-button" onClick={connectServer} disabled={!serverLink.trim()}>
-                {serverReady ? "Serveur connecté" : "Connecter"}
+                {serverReady ? t("onb.step3s.connected") : t("onb.step3s.connect")}
               </button>
               {serverError && <small className={serverReady ? "server-success" : "server-error"}>{serverError}</small>}
             </div>
@@ -335,23 +325,23 @@ function Onboarding({ finish }: { finish: () => void }) {
         )}
         {step === 3 && mode !== "server" && (
           <>
-            <p className="eyebrow">WHISPER SUR CE MAC</p>
+            <p className="eyebrow">{t("onb.step3l.eyebrow")}</p>
             <h1>
-              Installez Whisper
+              {t("onb.step3l.titleA")}
               <br />
-              <em>une seule fois.</em>
+              <em>{t("onb.step3l.titleB")}</em>
             </h1>
             <div className="model-install">
               <strong>Whisper Medium</strong>
-              <span>≈ 1,5 Go · très bonne précision en français</span>
+              <span>{t("onb.step3l.modelCopy")}</span>
               {installed ? (
-                <p>✓ Whisper est prêt.</p>
+                <p>{t("onb.step3l.ready")}</p>
               ) : (
                 <button
                   className="record-button"
                   onClick={() => setInstalled(true)}
                 >
-                  Télécharger et installer
+                  {t("onb.step3l.install")}
                 </button>
               )}
             </div>
@@ -359,29 +349,27 @@ function Onboarding({ finish }: { finish: () => void }) {
         )}
         {step === 4 && (
           <>
-            <p className="eyebrow">VOS PERMISSIONS</p>
+            <p className="eyebrow">{t("onb.step4.eyebrow")}</p>
             <h1>
-              Une dernière
+              {t("onb.step4.titleA")}
               <br />
-              <em>autorisation.</em>
+              <em>{t("onb.step4.titleB")}</em>
             </h1>
             <div className="permission-list">
               <div>
-                <strong>Audio système</strong>
-                <small>
-                  Nécessaire pour entendre l’application où votre cours se joue.
-                </small>
+                <strong>{t("onb.step4.sysAudio")}</strong>
+                <small>{t("onb.step4.sysAudioCopy")}</small>
                 <button onClick={() => native.requestScreenRecordingAccess()}>
-                  Autoriser
+                  {t("onb.step4.allow")}
                 </button>
               </div>
               <div>
                 <strong>
-                  Microphone <i>Optionnel</i>
+                  {t("onb.step4.mic")} <i>{t("onb.step4.optional")}</i>
                 </strong>
-                <small>Ajoutez vos propres questions à la transcription.</small>
+                <small>{t("onb.step4.micCopy")}</small>
                 <button onClick={() => setPermission(true)}>
-                  {permission ? "Autorisé" : "Autoriser"}
+                  {permission ? t("onb.step4.allowed") : t("onb.step4.allow")}
                 </button>
               </div>
             </div>
@@ -389,27 +377,24 @@ function Onboarding({ finish }: { finish: () => void }) {
         )}
         {step === 5 && (
           <>
-            <p className="eyebrow">TOUT EST PRÊT</p>
+            <p className="eyebrow">{t("onb.step5.eyebrow")}</p>
             <h1>
-              Vous êtes prêt
+              {t("onb.step5.titleA")}
               <br />
-              <em>à écouter.</em>
+              <em>{t("onb.step5.titleB")}</em>
             </h1>
-            <p>
-              Ouvrez votre classe, choisissez l’application qui la joue, puis
-              appuyez sur Enregistrer.
-            </p>
+            <p>{t("onb.step5.copy")}</p>
           </>
         )}
       </div>
       <div className="onboarding-actions">
         {step > 0 && (
           <button className="text-button" onClick={() => setStep(step - 1)}>
-            Retour
+            {t("onb.back")}
           </button>
         )}
         <button className="record-button" onClick={next}>
-          {step === 5 ? "Commencer avec pssst" : "Continuer"}
+          {step === 5 ? t("onb.start") : t("onb.continue")}
         </button>
       </div>
     </main>
@@ -429,7 +414,8 @@ function Setup({
   initialMic?: boolean;
   courseSuggestions?: string[];
 }) {
-  const [sources, setSources] = useState<UiSource[]>(fallback);
+  const t = useT();
+  const [sources, setSources] = useState<UiSource[]>(fallbackSources);
   const [source, setSource] = useState<UiSource | null>(null);
   const [open, setOpen] = useState(false);
   const [course, setCourse] = useState(
@@ -465,7 +451,7 @@ function Setup({
       const mapped = applications.map((application) => ({
         id: application.id,
         name: application.name,
-        detail: "Application ouverte",
+        detail: t("setup.src.open"),
         available: application.available,
         iconData:
           sources.find((item) => item.id === application.id)?.iconData ??
@@ -524,26 +510,20 @@ function Setup({
   return (
     <main className="setup">
       <section className="setup-intro">
-        <p className="eyebrow">NOUVEL ENREGISTREMENT</p>
+        <p className="eyebrow">{t("setup.eyebrow")}</p>
         <h1>
-          Prêt à enregistrer
+          {t("setup.titleA")}
           <br />
-          <em>votre cours.</em>
+          <em>{t("setup.titleB")}</em>
         </h1>
-        <p>
-          Choisissez la classe, l’application, puis laissez pssst faire le
-          reste.
-        </p>
+        <p>{t("setup.copy")}</p>
       </section>
       <section className="setup-form">
         {permissionDenied ? (
           <section className="permission-card">
-            <p className="eyebrow">AUTORISATION REQUISE</p>
-            <h3>Autorisez pssst à écouter votre cours.</h3>
-            <p>
-              macOS bloque l’accès à l’audio des applications tant que
-              l’autorisation audio système n’est pas activée.
-            </p>
+            <p className="eyebrow">{t("setup.perm.eyebrow")}</p>
+            <h3>{t("setup.perm.title")}</h3>
+            <p>{t("setup.perm.copy")}</p>
             <button
               className="record-button"
               onClick={async () => {
@@ -555,11 +535,9 @@ function Setup({
                 window.setTimeout(() => void loadApplications(), 900);
               }}
             >
-              Autoriser dans macOS
+              {t("setup.perm.button")}
             </button>
-            <small>
-              Activez pssst, puis revenez ici et relancez l’application.
-            </small>
+            <small>{t("setup.perm.hint")}</small>
           </section>
         ) : (
           <>
@@ -585,13 +563,13 @@ function Setup({
               <p className="availability-note compact">
                 <span>!</span>
                 {!course.trim()
-                  ? "Ajoutez le nom du cours pour commencer."
-                  : "Choisissez l’application qui joue votre cours."}
+                  ? t("setup.hint.course")
+                  : t("setup.hint.app")}
               </p>
             )}
             <div className="action-row">
               <p className="local-note">
-                <span>⌁</span> Audio seulement · enregistré localement sur ce Mac
+                <span>⌁</span> {t("setup.localNote")}
               </p>
               <button
                 className="record-button"
@@ -609,7 +587,7 @@ function Setup({
                 }}
               >
                 <span className="record-button-dot" />
-                {starting ? "Préparation…" : "Commencer l’enregistrement"}
+                {starting ? t("setup.preparing") : t("setup.start")}
               </button>
             </div>
           </>
@@ -626,6 +604,7 @@ function Recording({
   snapshot: RecordingSnapshot;
   stop: () => Promise<void>;
 }) {
+  const t = useT();
   const [seconds, setSeconds] = useState(snapshot.elapsed_seconds);
   const [stopping, setStopping] = useState(false);
   const [offline, setOffline] = useState(false);
@@ -659,12 +638,12 @@ function Recording({
     <main className="session-page">
       <section className="session-top">
         <div>
-          <p className="eyebrow">EN COURS</p>
+          <p className="eyebrow">{t("rec.eyebrow")}</p>
           <h2>{session.course}</h2>
           <p className="session-subline">
             <b className="recording-live" /> {formatTime(seconds)} ·{" "}
             {session.selected_application.name}
-            {session.microphone_included && " · Micro inclus"}
+            {session.microphone_included && ` · ${t("rec.micIncluded")}`}
           </p>
         </div>
         <div className="session-actions">
@@ -672,7 +651,7 @@ function Recording({
             className="network-button"
             onClick={() => setOffline(!offline)}
           >
-            {offline ? "Hors ligne — file locale active" : "Connecté"}
+            {offline ? t("rec.offline") : t("rec.connected")}
           </button>
           <button
             className="stop-button"
@@ -683,52 +662,52 @@ function Recording({
             }}
           >
             <Square size={12} fill="currentColor" stroke="none" aria-hidden="true" />
-            {stopping ? "Finalisation…" : "Terminer le cours"}
+            {stopping ? t("rec.finalizing") : t("rec.stop")}
           </button>
         </div>
       </section>
       <div className="session-health">
         <span>
           <i className="health-dot active" />
-          Enregistrement local
+          {t("rec.health.local")}
         </span>
         <span>
           <i className={`health-dot ${offline ? "delayed" : "waiting"}`} />
           {offline
-            ? "Transcription différée"
+            ? t("rec.health.deferred")
             : segments.length
-              ? "Transcription à jour"
-              : "En attente de séquences"}
+              ? t("rec.health.upToDate")
+              : t("rec.health.waiting")}
         </span>
         <span>
           <i className="health-dot waiting" />
-          Correction en attente
+          {t("rec.health.correction")}
         </span>
       </div>
       <section className="transcript-stage">
         <div className="transcript-heading">
           <div>
-            <h3>Transcription</h3>
+            <h3>{t("rec.transcript")}</h3>
             <p>
               {offline
-                ? "Les séquences restent dans la file locale."
-                : "Les segments apparaissent dès que Whisper les termine."}
+                ? t("rec.transcript.offline")
+                : t("rec.transcript.live")}
             </p>
           </div>
-          <button>Aller au direct ↓</button>
+          <button>{t("rec.transcript.jump")}</button>
         </div>
         <div className="transcript-list">
           {segments.map((segment) => (
             <article className="transcript-segment" key={segment.backend_id}>
               <time>{formatTime(Math.floor(segment.start_ms / 1000))}</time>
               <p>{segment.raw_text}</p>
-              <small>{segment.corrected_text ? "Corrigé" : "Brut"}</small>
+              <small>{segment.corrected_text ? t("rec.seg.corrected") : t("rec.seg.raw")}</small>
             </article>
           ))}
           {!segments.length && (
             <article className="transcript-segment waiting">
               <time>{formatTime(seconds)}</time>
-              <p>La première séquence est en cours de préparation…</p>
+              <p>{t("rec.seg.preparing")}</p>
             </article>
           )}
         </div>
@@ -744,24 +723,25 @@ function Finalizing({
   snapshot: RecordingSnapshot;
   open: () => void;
 }) {
+  const t = useT();
   return (
     <main className="finalizing">
-      <p className="eyebrow">COURS TERMINÉ</p>
+      <p className="eyebrow">{t("fin.eyebrow")}</p>
       <h1>
-        Votre enregistrement
+        {t("fin.titleA")}
         <br />
-        <em>reste en sécurité.</em>
+        <em>{t("fin.titleB")}</em>
       </h1>
       <p>
         {snapshot.session.tracks.reduce(
           (sum, track) => sum + track.bytes_written,
           0,
         ) > 44
-          ? "Les pistes locales ont été finalisées. La file de transcription peut continuer en arrière-plan."
-          : "La session a été sauvegardée. Les derniers octets sont en cours de finalisation."}
+          ? t("fin.copy.ready")
+          : t("fin.copy.wait")}
       </p>
       <button className="record-button" onClick={open}>
-        Voir le cours
+        {t("fin.open")}
       </button>
     </main>
   );
@@ -776,23 +756,24 @@ function Library({
   open: (snapshot: RecordingSnapshot) => void;
   setup: () => void;
 }) {
+  const t = useT();
   return (
     <main className="library-page">
       <div className="library-title">
         <div>
-          <p className="eyebrow">VOS COURS</p>
+          <p className="eyebrow">{t("lib.eyebrow")}</p>
           <h1>
-            Ce que vous avez
+            {t("lib.titleA")}
             <br />
-            <em>gardé.</em>
+            <em>{t("lib.titleB")}</em>
           </h1>
         </div>
         <button className="new-recording" onClick={setup}>
-          <Plus size={14} aria-hidden="true" /> Enregistrer un cours
+          <Plus size={14} aria-hidden="true" /> {t("lib.new")}
         </button>
       </div>
       <div className="search-line">
-        <input placeholder="Rechercher dans vos cours" />
+        <input placeholder={t("lib.search")} />
         <span>⌘ K</span>
       </div>
       <div className="lecture-list">
@@ -808,26 +789,24 @@ function Library({
                 <small>
                   {snapshot.session.selected_application.name} ·{" "}
                   {snapshot.session.recording_state === "recording"
-                    ? "En cours"
-                    : "Local"}
+                    ? t("lib.state.recording")
+                    : t("lib.state.local")}
                 </small>
               </span>
               <span className="lecture-end-actions">
                 <i className="lecture-status">
                   {snapshot.session.recording_state === "recoverable"
-                    ? "À récupérer"
+                    ? t("lib.state.recoverable")
                     : snapshot.session.recording_state === "recording"
-                      ? "En cours"
-                      : "Prêt"}
+                      ? t("lib.state.recording")
+                      : t("lib.state.ready")}
                 </i>
                 <b>›</b>
               </span>
             </button>
           ))
         ) : (
-          <p className="empty-library">
-            Aucun cours enregistré pour le moment.
-          </p>
+          <p className="empty-library">{t("lib.empty")}</p>
         )}
       </div>
     </main>
@@ -843,6 +822,7 @@ function Detail({
   continueCourse: (course: string, appId?: string | null, mic?: boolean) => void;
   onBack?: () => void;
 }) {
+  const t = useT();
   const [version, setVersion] = useState("final");
   const [audioUrl, setAudioUrl] = useState("");
   const [audioError, setAudioError] = useState("");
@@ -860,12 +840,12 @@ function Detail({
   useEffect(() => {
     if (session.correction_state === "uploaded" && correcting) {
       setCorrecting(false);
-      setCorrectionMessage("Correction terminée.");
+      setCorrectionMessage(t("detail.correct.done"));
     } else if (session.correction_state === "failed" && correcting) {
       setCorrecting(false);
-      setCorrectionMessage(session.last_error || "Échec de la correction.");
+      setCorrectionMessage(session.last_error || t("detail.correct.failed"));
     }
-  }, [session.correction_state, session.last_error, correcting]);
+  }, [session.correction_state, session.last_error, correcting, t]);
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -897,7 +877,7 @@ function Detail({
           if (isCancelled) return;
           if (blob.size <= 44) {
             setAudioUrl("");
-            setAudioError("Cette session ne contient aucun signal audio enregistré.");
+            setAudioError(t("detail.audio.empty"));
             return;
           }
           const blobUrl = URL.createObjectURL(blob);
@@ -922,7 +902,7 @@ function Detail({
         URL.revokeObjectURL(objectUrlToRevoke);
       }
     };
-  }, [session.id]);
+  }, [session.id, t]);
   const transcript = useMemo(
     () =>
       session.transcript_segments.map((segment) => ({
@@ -943,10 +923,10 @@ function Detail({
           type="button"
           className="back-link"
           onClick={onBack}
-          aria-label="Retour aux cours"
+          aria-label={t("detail.back")}
         >
           <ArrowLeft size={16} aria-hidden="true" />
-          <span>Cours</span>
+          <span>{t("detail.back.short")}</span>
         </button>
       )}
       <div className="detail-head">
@@ -969,11 +949,11 @@ function Detail({
               )
             }
           >
-            + Continuer ce cours
+            {t("detail.continue")}
           </button>
           <div className="audio-player">
             <small>
-              {audioUrl ? "Piste locale · prête à écouter" : audioError ? "Piste locale indisponible" : "Préparation de la piste locale…"}
+              {audioUrl ? t("detail.audio.ready") : audioError ? t("detail.audio.unavailable") : t("detail.audio.preparing")}
             </small>
             {audioUrl && (
               <audio
@@ -981,8 +961,8 @@ function Detail({
                 src={audioUrl}
                 controls
                 onError={(event) => {
-                  const detail = event.currentTarget.error?.message || "format audio invalide";
-                  const message = `Impossible de lire cette piste locale : ${detail}`;
+                  const detail = event.currentTarget.error?.message || t("detail.audio.invalid");
+                  const message = t("detail.audio.playError", { detail });
                   setAudioError(message);
                   console.error("Pssst audio playback error", event.currentTarget.error);
                 }}
@@ -1000,10 +980,10 @@ function Detail({
             key={item}
           >
             {item === "final"
-              ? "Version finale"
+              ? t("detail.tab.final")
               : item === "corrected"
-                ? "Corrigée"
-                : "Brute"}
+                ? t("detail.tab.corrected")
+                : t("detail.tab.raw")}
           </button>
         ))}
       </div>
@@ -1017,7 +997,7 @@ function Detail({
               onClick={async () => {
                 if (!isTauri()) return;
                 setCorrecting(true);
-                setCorrectionMessage("Correction en cours…");
+                setCorrectionMessage(t("detail.correct.running"));
                 try {
                   await native.correctSession(session.id);
                 } catch (error) {
@@ -1026,7 +1006,7 @@ function Detail({
                 }
               }}
             >
-              {isCorrecting ? "Correction en cours…" : "Corriger la transcription"}
+              {isCorrecting ? t("detail.correct.running") : t("detail.correct.button")}
             </button>
             {correctionMessage && (
               <span className="correct-status">{correctionMessage}</span>
@@ -1039,9 +1019,7 @@ function Detail({
               {transcript.map((line) => line.text).join(" ").replace(/\s+/g, " ")}
             </div>
           ) : (
-            <p className="pending-copy">
-              La file locale prépare la transcription de cette session.
-            </p>
+            <p className="pending-copy">{t("detail.pending")}</p>
           )
         ) : (
           <>
@@ -1052,9 +1030,7 @@ function Detail({
               </p>
             ))}
             {!transcript.length && (
-              <p className="pending-copy">
-                La file locale prépare la transcription de cette session.
-              </p>
+              <p className="pending-copy">{t("detail.pending")}</p>
             )}
           </>
         )}
@@ -1085,25 +1061,27 @@ function ExternalLink({
 }
 
 function Settings() {
+  const t = useT();
+  const lang = useLang();
   const [mode, setMode] = useState(
-    () => localStorage.getItem("pssst.transcription-mode") ?? "automatic",
+    () => preference.get("pssst.transcription-mode") ?? "automatic",
   );
   const [link, setLink] = useState(
-    () => localStorage.getItem("pssst.connection-link") ?? "",
+    () => preference.get("pssst.connection-link") ?? "",
   );
   const [connection, setConnection] = useState("");
   const [copied, setCopied] = useState(false);
   const [model, setModel] = useState(
-    () => localStorage.getItem("pssst.openrouter-model") ?? "openai/gpt-4o-mini",
+    () => preference.get("pssst.openrouter-model") ?? "openai/gpt-4o-mini",
   );
   const [apiKey, setApiKey] = useState(
-    () => localStorage.getItem("pssst.openrouter-api-key") ?? "",
+    () => preference.get("pssst.openrouter-api-key") ?? "",
   );
   const [accountName, setAccountName] = useState(
-    () => localStorage.getItem("pssst.account-name") ?? "",
+    () => preference.get("pssst.account-name") ?? "",
   );
   const [accountEmail, setAccountEmail] = useState(
-    () => localStorage.getItem("pssst.account-email") ?? "",
+    () => preference.get("pssst.account-email") ?? "",
   );
   const [accountSaved, setAccountSaved] = useState(false);
   const connect = async () => {
@@ -1112,25 +1090,25 @@ function Settings() {
         ? await native.validateServerLink(link.trim())
         : await fetch(link.trim()).then((response) => {
             if (!response.ok)
-              throw new Error("Lien invalide ou serveur indisponible");
+              throw new Error(t("set.server.invalid"));
             return response.json();
           });
-      localStorage.setItem("pssst.connection-link", link.trim());
+      preference.set("pssst.connection-link", link.trim());
       setConnection(
-        `Connecté · faster-whisper · ${result.capabilities.whisper_model}`,
+        t("set.server.ok", { model: result.capabilities.whisper_model }),
       );
     } catch (error) {
       setConnection(
-        error instanceof Error ? error.message : "Connexion impossible",
+        error instanceof Error ? error.message : t("set.server.failed"),
       );
     }
   };
   const save = async () => {
-    localStorage.setItem("pssst.openrouter-model", model.trim());
-    localStorage.setItem("pssst.openrouter-api-key", apiKey.trim());
-    localStorage.setItem("pssst.transcription-mode", mode);
-    localStorage.setItem("pssst.account-name", accountName);
-    localStorage.setItem("pssst.account-email", accountEmail);
+    preference.set("pssst.openrouter-model", model.trim());
+    preference.set("pssst.openrouter-api-key", apiKey.trim());
+    preference.set("pssst.transcription-mode", mode);
+    preference.set("pssst.account-name", accountName);
+    preference.set("pssst.account-email", accountEmail);
     if (isTauri()) {
       try {
         await native.saveOpenRouterConfig(apiKey.trim(), model.trim());
@@ -1142,8 +1120,12 @@ function Settings() {
     window.setTimeout(() => setAccountSaved(false), 1800);
   };
   const clearAccount = () => {
-    localStorage.removeItem("pssst.account-name");
-    localStorage.removeItem("pssst.account-email");
+    try {
+      window.localStorage?.removeItem("pssst.account-name");
+      window.localStorage?.removeItem("pssst.account-email");
+    } catch {
+      /* storage unavailable in test/preview */
+    }
     setAccountName("");
     setAccountEmail("");
     setAccountSaved(false);
@@ -1152,11 +1134,11 @@ function Settings() {
   return (
     <main className="settings-page">
       <div>
-        <p className="eyebrow">RÉGLAGES</p>
+        <p className="eyebrow">{t("set.eyebrow")}</p>
         <h1>
-          À votre
+          {t("set.titleA")}
           <br />
-          <em>manière.</em>
+          <em>{t("set.titleB")}</em>
         </h1>
         <small className="app-version">Pssst v0.12.28</small>
       </div>
@@ -1164,52 +1146,60 @@ function Settings() {
         <section className="settings-section account-section">
           <div className="settings-section-heading">
             <div>
-              <p className="eyebrow">COMPTE</p>
-              <h2>Votre espace Pssst</h2>
+              <p className="eyebrow">{t("set.account.eyebrow")}</p>
+              <h2>{t("set.account.title")}</h2>
             </div>
-            <span className="account-badge">Sur ce Mac</span>
+            <span className="account-badge">{t("set.account.badge")}</span>
           </div>
-          <p className="settings-copy">Gardez vos préférences et vos cours identifiables sans envoyer vos enregistrements ailleurs.</p>
+          <p className="settings-copy">{t("set.account.copy")}</p>
           <div className="settings-grid">
             <label>
-              Nom
-              <input value={accountName} onChange={(event) => setAccountName(event.target.value)} placeholder="Votre nom" />
+              {t("set.account.name")}
+              <input value={accountName} onChange={(event) => setAccountName(event.target.value)} placeholder={t("set.account.namePh")} />
             </label>
             <label>
-              Adresse e-mail
+              {t("set.account.email")}
               <input type="email" value={accountEmail} onChange={(event) => setAccountEmail(event.target.value)} placeholder="vous@exemple.fr" />
             </label>
           </div>
           <div className="account-actions">
-            <button className="quiet-button" onClick={clearAccount}>Effacer le profil</button>
-            {accountSaved && <span className="saved-state">Profil enregistré</span>}
+            <button className="quiet-button" onClick={clearAccount}>{t("set.account.clear")}</button>
+            {accountSaved && <span className="saved-state">{t("set.account.saved")}</span>}
           </div>
         </section>
         <label>
-          Transcription
+          {t("set.language")}
+          <select
+            value={lang}
+            onChange={(event) => setLang(event.target.value as Lang)}
+          >
+            <option value="fr">Français</option>
+            <option value="en">English</option>
+          </select>
+        </label>
+        <label>
+          {t("set.transcription")}
           <select
             value={mode}
             onChange={(event) => setMode(event.target.value)}
           >
-            <option value="automatic">Automatique — Recommandé</option>
-            <option value="local">Sur ce Mac</option>
-            <option value="server">Mon serveur</option>
+            <option value="automatic">{t("set.transcription.auto")}</option>
+            <option value="local">{t("set.transcription.local")}</option>
+            <option value="server">{t("set.transcription.server")}</option>
           </select>
-          <small>
-            L’enregistrement local reste prioritaire dans tous les modes.
-          </small>
+          <small>{t("set.transcription.note")}</small>
         </label>
         {mode === "server" && (
           <>
             <div className="server-setup-note">
-              <strong>Vous avez un serveur Linux&nbsp;?</strong>
-              <small>Copiez cette commande dans son terminal, puis collez ici le lien qu’il vous donne.</small>
+              <strong>{t("set.server.note.title")}</strong>
+              <small>{t("set.server.note.copy")}</small>
               <div className="command-box settings-command-box">
                 <code>{install}</code>
                 <button
                   className="copy-icon"
-                  aria-label="Copier la commande"
-                  title={copied ? "Commande copiée" : "Copier la commande"}
+                  aria-label={t("onb.copyCmd")}
+                  title={copied ? t("onb.copiedCmd") : t("onb.copyCmd")}
                   onClick={() => { navigator.clipboard?.writeText(install); setCopied(true); }}
                 >
                   <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>
@@ -1221,11 +1211,11 @@ function Settings() {
               <input
                 value={link}
                 onChange={(event) => setLink(event.target.value)}
-                placeholder="https://mon-serveur/connect/…"
+                placeholder="https://my-server/connect/…"
               />
             </label>
             <button className="record-button" onClick={connect}>
-              Connecter
+              {t("set.server.connect")}
             </button>
             {connection && (
               <p className="availability-note">
@@ -1238,17 +1228,15 @@ function Settings() {
         <section className="settings-section">
           <div className="settings-section-heading">
             <div>
-              <p className="eyebrow">CORRECTION IA</p>
+              <p className="eyebrow">{t("set.ai.eyebrow")}</p>
               <h2>OpenRouter</h2>
             </div>
-            <span className="account-badge">Optionnel</span>
+            <span className="account-badge">{t("set.ai.badge")}</span>
           </div>
-          <p className="settings-copy">
-            Corrige automatiquement la grammaire et la ponctuation du texte transcrit sans modifier l’enregistrement brut.
-          </p>
+          <p className="settings-copy">{t("set.ai.copy")}</p>
           <div className="settings-grid">
             <label>
-              Clé API OpenRouter
+              {t("set.ai.key")}
               <input
                 type="password"
                 value={apiKey}
@@ -1258,7 +1246,7 @@ function Settings() {
               />
             </label>
             <label>
-              Modèle
+              {t("set.ai.model")}
               <input
                 value={model}
                 onChange={(event) => setModel(event.target.value)}
@@ -1269,26 +1257,24 @@ function Settings() {
           </div>
         </section>
         <label className="settings-switch">
-          Inclure mon micro par défaut
+          {t("set.micDefault")}
           <input type="checkbox" defaultChecked />
         </label>
         <label>
-          Dossier des enregistrements
-          <input defaultValue="Données pssst / recordings" readOnly />
+          {t("set.folder")}
+          <input defaultValue={t("set.folder.value")} readOnly />
         </label>
         <button className="record-button" onClick={save}>
-          Enregistrer les modifications
+          {t("set.save")}
         </button>
         <section className="settings-section">
           <div className="settings-section-heading">
             <div>
-              <p className="eyebrow">CRÉDITS</p>
+              <p className="eyebrow">{t("set.credits.eyebrow")}</p>
               <h2>Made by Irisla</h2>
             </div>
           </div>
-          <p className="settings-copy">
-            Pssst est conçu et développé par Irisla.
-          </p>
+          <p className="settings-copy">{t("set.credits.copy")}</p>
           <div className="credits-links">
             <ExternalLink href="https://irisla.com">irisla.com</ExternalLink>
             <ExternalLink href="https://wa.me/50942404646">WhatsApp · +509 42 40 4646</ExternalLink>
