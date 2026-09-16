@@ -1481,6 +1481,20 @@ h1 em {
 }
 .quiet-button:hover { background: #fff; color: #29352c; }
 .saved-state { color: #64805f; font-size: 11px; }
+.credits-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.credits-links a {
+  border: 1px solid #d8d6cf;
+  border-radius: 999px;
+  color: #5d675c;
+  font-size: 11px;
+  padding: 7px 12px;
+  text-decoration: none;
+}
+.credits-links a:hover { background: #fff; color: #29352c; }
 .new-recording {
   background: #27342b;
   color: white;

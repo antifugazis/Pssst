@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { ArrowLeft, Library as LibraryIcon, Plus, Settings as SettingsIcon, Square } from "lucide-react";
 import { CourseInput } from "./components/CourseInput";
@@ -1062,6 +1063,27 @@ function Detail({
   );
 }
 
+function ExternalLink({
+  href,
+  className,
+  children,
+}: {
+  href: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  const handleClick = (event: ReactMouseEvent<HTMLAnchorElement>) => {
+    if (!isTauri()) return;
+    event.preventDefault();
+    void import("@tauri-apps/plugin-opener").then(({ openUrl }) => openUrl(href));
+  };
+  return (
+    <a href={href} target="_blank" rel="noreferrer" className={className} onClick={handleClick}>
+      {children}
+    </a>
+  );
+}
+
 function Settings() {
   const [mode, setMode] = useState(
     () => localStorage.getItem("pssst.transcription-mode") ?? "automatic",
@@ -1257,6 +1279,23 @@ function Settings() {
         <button className="record-button" onClick={save}>
           Enregistrer les modifications
         </button>
+        <section className="settings-section">
+          <div className="settings-section-heading">
+            <div>
+              <p className="eyebrow">CRÉDITS</p>
+              <h2>Made by Irisla</h2>
+            </div>
+          </div>
+          <p className="settings-copy">
+            Pssst est conçu et développé par Irisla.
+          </p>
+          <div className="credits-links">
+            <ExternalLink href="https://irisla.com">irisla.com</ExternalLink>
+            <ExternalLink href="https://wa.me/50942404646">WhatsApp · +509 42 40 4646</ExternalLink>
+            <ExternalLink href="https://instagram.com/irislhq">Instagram · @irislhq</ExternalLink>
+            <ExternalLink href="https://tiktok.com/@irislhq">TikTok · @irislhq</ExternalLink>
+          </div>
+        </section>
       </section>
     </main>
   );
