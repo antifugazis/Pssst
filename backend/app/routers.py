@@ -22,17 +22,29 @@ class CorrectRequest(BaseModel):
     openrouter_api_key: str | None = None
     openrouter_model: str | None = None
 
+SUPPORTED_LANGUAGES = ("en", "fr")
+
+class RegisterSessionRequest(BaseModel):
+    # None means "detect on the first chunk, then pin it for the session".
+    language: str | None = None
+
 @connect_router.get("/connect/{secret}")
 async def connect(secret: str):
     import hmac
     if not hmac.compare_digest(secret, connection_secret()): raise HTTPException(401, "Invalid pssst connection link")
-    return {"api_base_url": "/v1", "authorization": "bearer", "capabilities": {"faster_whisper": True, "whisper_model": settings.whisper_model, "languages": ["fr"], "chunk_transcription": True, "correction": bool(settings.openrouter_api_key)}, "health": "ok"}
+    return {"api_base_url": "/v1", "authorization": "bearer", "capabilities": {"faster_whisper": True, "whisper_model": settings.whisper_model, "languages": list(SUPPORTED_LANGUAGES), "chunk_transcription": True, "correction": bool(settings.openrouter_api_key)}, "health": "ok"}
 
 @connect_router.post("/admin/regenerate-connection-link", dependencies=[Depends(authorize)])
 async def regenerate_connection_link(): return {"connection_link": revoke_and_regenerate()}
 @router.post("/sessions/{session_id}")
-async def register_session(session_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
-    if not await db.get(Session, session_id): db.add(Session(id=session_id, state="recorded")); await db.commit()
+async def register_session(session_id: uuid.UUID, body: RegisterSessionRequest | None = None, db: AsyncSession = Depends(get_db)):
+    if body and body.language and body.language not in SUPPORTED_LANGUAGES:
+        raise HTTPException(422, f"Unsupported language: {body.language}")
+    session = await db.get(Session, session_id)
+    if not session:
+        db.add(Session(id=session_id, state="recorded", language=body.language if body else None)); await db.commit()
+    elif body and body.language and session.language != body.language:
+        session.language = body.language; await db.commit()
     return {"id": str(session_id)}
 @router.post("/sessions/{session_id}/chunks/{sequence}")
 async def upload_chunk(session_id: uuid.UUID, sequence: int, audio: UploadFile, db: AsyncSession = Depends(get_db)):
@@ -52,15 +64,18 @@ async def transcribe_chunk(session_id: uuid.UUID, sequence: int, db: AsyncSessio
     chunk = await db.scalar(select(AudioChunk).where(AudioChunk.session_id == session_id, AudioChunk.sequence == sequence))
     if not chunk: raise HTTPException(404, "Unknown chunk")
     if chunk.state == "complete": return {"state": "complete"}
+    session = await db.get(Session, session_id)
     chunk.state = "processing"; await db.commit()
     try:
-        segments = whisper.transcribe(Path(chunk.local_reference))
+        segments, detected = whisper.transcribe(Path(chunk.local_reference), language=session.language if session else None)
         for segment in segments:
             db.add(TranscriptSegment(session_id=session_id, source_chunk_id=chunk.id, start_ms=segment["start_ms"], end_ms=segment["end_ms"], raw_text=segment["raw_text"]))
+        if session and not session.language:
+            session.language = detected
         chunk.state = "complete"; await db.commit()
     except Exception:
         chunk.state = "failed"; await db.commit(); raise
-    return {"state": "complete", "segment_count": len(segments)}
+    return {"state": "complete", "segment_count": len(segments), "language": session.language if session else detected}
 
 @router.get("/sessions/{session_id}/transcript")
 async def transcript(session_id: uuid.UUID, db: AsyncSession = Depends(get_db)):

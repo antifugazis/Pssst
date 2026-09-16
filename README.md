@@ -2,9 +2,9 @@
 
 **Local-first lecture recorder for macOS.** Pssst captures application audio
 and microphone audio as separate tracks, streams 25-second chunks to a
-self-hosted faster-whisper server, and produces a corrected French transcript
-via OpenRouter — while recording itself never depends on the network, the
-backend, or even its own UI.
+self-hosted faster-whisper server, and produces a corrected transcript in
+French or English via OpenRouter — while recording itself never depends on
+the network, the backend, or even its own UI.
 
 ![Recording setup](docs/screenshots/app-setup.png)
 
@@ -19,8 +19,11 @@ backend, or even its own UI.
 - **Resumable upload queue** — audio is chunked locally into self-contained
   25s WAV files and uploaded with retry/backoff. Recording continues even if
   the server is down; the queue catches up when it returns.
-- **French transcription** — faster-whisper on your own server; raw whisper
-  output is stored immutably and never overwritten.
+- **French & English transcription** — faster-whisper on your own server
+  auto-detects the lecture's language on the first chunk and pins it for the
+  session; raw whisper output is stored immutably and never overwritten.
+- **Bilingual interface** — the desktop UI is fully translated in French and
+  English, selectable in Settings.
 - **OpenRouter correction** — optional second pass that fixes ASR errors
   (homophones, dictated notation like `free -h`) without reformulating. Runs
   locally from the desktop app with your own API key.
@@ -150,9 +153,9 @@ All `/v1` routes require `Authorization: Bearer <secret>`.
 |---|---|
 | `GET /healthz` | Liveness + whisper config |
 | `GET /connect/{secret}` | Validates a link, returns server capabilities |
-| `POST /v1/sessions/{id}` | Idempotent session registration |
+| `POST /v1/sessions/{id}` | Idempotent session registration; optional body `{"language": "fr"\|"en"}` pins the language (default: auto-detect on first chunk) |
 | `POST /v1/sessions/{id}/chunks/{seq}` | Idempotent WAV chunk upload |
-| `POST /v1/sessions/{id}/chunks/{seq}/transcribe` | Run whisper on a chunk |
+| `POST /v1/sessions/{id}/chunks/{seq}/transcribe` | Run whisper on a chunk; returns the detected/pinned `language` |
 | `GET /v1/sessions/{id}/transcript` | Segments with raw/corrected/final text |
 | `POST /v1/sessions/{id}/correct?final=` | OpenRouter correction pass |
 | `GET /v1/sessions/{id}/status` | Chunk counts by state + correction state |

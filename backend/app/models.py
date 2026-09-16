@@ -14,6 +14,7 @@ class Session(Base):
     __tablename__ = "sessions"
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
     course_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("courses.id"))
+    language: Mapped[str | None] = mapped_column(String(8))
     state: Mapped[str] = mapped_column(String(32), default="recorded")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 class AudioTrack(Base):
