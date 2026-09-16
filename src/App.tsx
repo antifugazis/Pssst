@@ -1292,8 +1292,8 @@ function Settings() {
           <div className="credits-links">
             <ExternalLink href="https://irisla.com">irisla.com</ExternalLink>
             <ExternalLink href="https://wa.me/50942404646">WhatsApp · +509 42 40 4646</ExternalLink>
-            <ExternalLink href="https://instagram.com/irislhq">Instagram · @irislhq</ExternalLink>
-            <ExternalLink href="https://tiktok.com/@irislhq">TikTok · @irislhq</ExternalLink>
+            <ExternalLink href="https://instagram.com/irislahq">Instagram · @irislahq</ExternalLink>
+            <ExternalLink href="https://tiktok.com/@irislahq">TikTok · @irislahq</ExternalLink>
           </div>
         </section>
       </section>
