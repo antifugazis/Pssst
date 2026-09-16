@@ -6,6 +6,8 @@ self-hosted faster-whisper server, and produces a corrected French transcript
 via OpenRouter — while recording itself never depends on the network, the
 backend, or even its own UI.
 
+![Recording setup](docs/screenshots/app-setup.png)
+
 ## Features
 
 - **App + mic on separate tracks** — ScreenCaptureKit captures the selected
@@ -26,6 +28,12 @@ backend, or even its own UI.
   their own state machine and error channel.
 - **Library & playback** — browse past lectures, read raw/corrected/final
   transcript versions, click a segment to seek the audio.
+- **Guided onboarding** — six-step first run covering the pipeline, whisper
+  placement, and macOS permissions.
+
+| Onboarding | Library | Settings |
+|---|---|---|
+| ![Onboarding](docs/screenshots/onboarding-welcome.png) | ![Library](docs/screenshots/app-library.png) | ![Settings](docs/screenshots/app-settings.png) |
 
 ## How it works
 
@@ -85,6 +93,35 @@ Then paste the server's connection link (`http://<host>:<port>/connect/<secret>`
 into the app's Settings → Server. The link is printed by the installer, or
 found at `$PSSST_STORAGE_DIR/.connection-secret` for the bundled backend.
 
+## Recording a lecture
+
+1. Start audio in the app that plays the course (Zoom, Chrome, …).
+2. In Pssst, type the course name and pick the application.
+3. Optionally enable *Inclure mon micro* so your own questions are recorded.
+4. Press **Commencer l'enregistrement**. Transcript segments stream in live
+   as chunks are transcribed.
+5. Stop with the hold-to-stop control. The final partial chunk is exported
+   and the queue drains.
+6. In the lecture detail view, switch between **Brute** / **Corrigée** /
+   **Finale** transcript versions and click any segment to seek playback.
+7. With an OpenRouter key saved, press *Corriger la transcription* — the
+   corrected text fills in incrementally, raw text untouched.
+
+## Where files live
+
+| What | Path |
+|---|---|
+| Recordings & manifests | `~/Library/Application Support/com.irisla.pssst.desktop/recordings/sessions/<id>/` |
+| Server connection link | `…/recordings/server-connection.txt` |
+| OpenRouter config | `…/recordings/openrouter-config.json` |
+| Upload queue (per session) | `…/recordings/sessions/<id>/processing-queue.json` |
+| Backend chunks + secret | `backend/data/` (or `$PSSST_STORAGE_DIR`) |
+
+Each session directory contains `manifest.json`, `application/track.wav`,
+optionally `microphone/track.wav`, and `application/chunks/*.wav` until
+uploaded. All tracks are 48 kHz stereo WAV; float32 captures are normalized
+to PCM16 automatically.
+
 ## Configuration
 
 Backend settings use the `PSSST_` prefix (see `backend/.env.example`):
@@ -121,6 +158,10 @@ All `/v1` routes require `Authorization: Bearer <secret>`.
 | `GET /v1/sessions/{id}/status` | Chunk counts by state + correction state |
 | `POST /admin/regenerate-connection-link` | Rotate the bearer secret |
 
+The standalone worker (`server/install.sh`) implements the same `/connect`
+and `/v1` surface minus the correction endpoint — correction always runs
+from the desktop anyway.
+
 ## Project layout
 
 ```
@@ -128,7 +169,7 @@ src/            React frontend (views: setup, recording, library, detail, settin
 src-tauri/      Rust: capture backends, session store, chunk queue, Tauri commands
 backend/        FastAPI + PostgreSQL backend, Alembic migrations, pytest suite
 server/         Standalone single-file whisper worker (install.sh embeds it)
-docs/           DEVELOPMENT.md, MACOS_CAPTURE_TESTING.md, superpowers specs/plans
+docs/           Guides, screenshots, superpowers specs/plans
 scripts/        run-macos-app.sh (signed debug bundle → /Applications)
 ```
 
@@ -143,6 +184,16 @@ cd backend && .venv/bin/alembic check   # models match migrated schema
 
 The real faster-whisper model test is gated:
 `RUN_MODEL_TESTS=1 .venv/bin/pytest tests/test_transcription.py -k real`
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| App asks for permission on every launch | Use `pnpm app:mac`, not `tauri dev` — TCC binds to the signed `.app` |
+| No applications in the picker | Grant the audio permission via the onboarding/settings button, then relaunch |
+| Transcript stays empty | Check the connection link in Settings; the queue retries and syncs when the server is reachable |
+| Correction says "blocked" | Save an OpenRouter key + model in Settings → Correction IA |
+| `alembic upgrade head` fails: table exists | The DB predates migrations — run `.venv/bin/alembic stamp head` once |
 
 ## Docs
 
