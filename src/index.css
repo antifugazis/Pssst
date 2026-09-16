@@ -1222,6 +1222,7 @@ h1 em {
   transform: translateX(-2px);
 }
 .brand-button {
+  margin-bottom: 0;
   padding: 0;
 }
 .product-header nav {
@@ -1236,6 +1237,7 @@ h1 em {
   display: inline-flex;
   font-size: 13px;
   gap: 6px;
+  margin-bottom: 0;
 }
 .product-header nav button:hover {
   color: #253028;
